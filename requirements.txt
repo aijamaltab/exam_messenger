@@ -1,5 +1,5 @@
-Flask==2.3.3
-Flask-Session==0.5.0
-gunicorn==20.1.0
-mysqlclient==2.2.0
-Werkzeug==2.3.7
+flask
+gunicorn
+mysql-connector-python
+mysqlclient
+werkzeug

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: flask-messenger
+    env: python
+    buildCommand: ""
+    startCommand: gunicorn app:app
+    envVars:
+      - key: DB_HOST
+        value: db4free.net
+      - key: DB_USER
+        value: sellin29
+      - key: DB_PASSWORD
+        value: aijamal29062004
+      - key: DB_NAME
+        value: messenger_char
