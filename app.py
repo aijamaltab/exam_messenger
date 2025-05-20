@@ -37,21 +37,29 @@ def login():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        name = request.form['name']
-        phone = request.form['phone']
-        password = generate_password_hash(request.form['password'])
+        name = request.form.get('name')
+        phone = request.form.get('phone')
+        raw_password = request.form.get('password')
 
-        conn = get_connection()
-        cursor = conn.cursor()
+        if not (name and phone and raw_password):
+            return 'Все поля обязательны'
+
+        password = generate_password_hash(raw_password)
+        print(f"Регистрация: name={name}, phone={phone}, password_hash={password}")
+
         try:
+            conn = get_connection()
+            cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO users (name, phone, password) VALUES (%s, %s, %s)",
                 (name, phone, password)
             )
             conn.commit()
-        except:
-            return 'Такой номер уже зарегистрирован'
-        conn.close()
+            conn.close()
+        except Exception as e:
+            print("Ошибка при регистрации:", e)
+            return 'Такой номер уже зарегистрирован или другая ошибка'
+
         return redirect('/login')
     return render_template('register.html')
 
