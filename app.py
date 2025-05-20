@@ -85,17 +85,17 @@ def send():
 
         from_user_id = session.get('user_id')
         to_user_id = data.get('to_user_id')
-        content = data.get('content')
+        messages = data.get('messages')
 
-        if not from_user_id or not to_user_id or not content:
+        if not from_user_id or not to_user_id or not messages:
             print("Ошибка: пустые данные")
             return jsonify({'error': 'Invalid data'}), 400
 
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO messages (sender_id, receiver_id, content) VALUES (%s, %s, %s)",
-            (from_user_id, to_user_id, content)
+            "INSERT INTO messages (sender_id, receiver_id, messages) VALUES (%s, %s, %s)",
+            (from_user_id, to_user_id, messages)
         )
         conn.commit()
         conn.close()
@@ -109,7 +109,7 @@ def send():
 def serialize_message(msg, current_user_id):
     return {
         "id": msg.id,
-        "message": msg.content,
+        "message": msg.messages,
         "from_me": msg.from_user_id == current_user_id,
         "timestamp": msg.timestamp.strftime('%H:%M')  # формат только время, как в WhatsApp
     }
@@ -122,7 +122,7 @@ def get_messages(user_id):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT sender_id, content, file_url, timestamp FROM messages
+        SELECT sender_id, messages, file_url, timestamp FROM messages
         WHERE (sender_id = %s AND receiver_id = %s)
            OR (sender_id = %s AND receiver_id = %s)
         ORDER BY timestamp
@@ -131,10 +131,10 @@ def get_messages(user_id):
     conn.close()
 
     messages = []
-    for sender_id, content, file_url, timestamp in data:
+    for sender_id, messages, file_url, timestamp in data:
         messages.append({
             'from_me': sender_id == session['user_id'],
-            'message': content,
+            'message': messages,
             'file_url': file_url,
             'timestamp': timestamp.strftime('%H:%M')  # Только время как в WhatsApp
         })
