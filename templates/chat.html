@@ -103,7 +103,7 @@ function sendMessage() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       to_user_id: selectedUserId,
-      content: text
+      message: text
     })
   })
   .then(res => res.json())
