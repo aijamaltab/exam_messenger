@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>Messenger Aijamal</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
 </head>
 <body>
   {% if session['user_id'] %}
@@ -119,19 +120,17 @@ function sendMessage() {
 }
 let lastId = 0;
 
-function checkMessages() {
-    fetch(`/check-new-messages?last_id=${lastId}`)
-        .then(res => res.json())
-        .then(data => {
-            if (data.hasNew) {
-                location.reload(); // обновить страницу
-            }
-            lastId = data.last_id;
-        });
-}
+const socket = io();
 
-// Проверять каждые 5 секунд
-setInterval(checkMessages, 5000);
+        socket.on('connect', () => {
+            console.log('Подключено к серверу');
+        });
+
+        socket.on('new_message', (data) => {
+            console.log('Новое сообщение:', data.msg);
+            // Автообновляем страницу
+            location.reload();
+        });
 
   </script>
 </body>
