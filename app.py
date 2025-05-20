@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_connection
 from flask_socketio import SocketIO, emit
+import eventlet
 
 from datetime import datetime
 
@@ -13,6 +14,7 @@ UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 socketio = SocketIO(app)
+eventlet.monkey_patch()
 last_message_id = 0
 
 @app.route('/')
@@ -202,7 +204,6 @@ def get_last_message_id():
     conn.close()
     return last_id
 
-if __name__ == '__main__':
-    last_message_id = get_last_message_id()
-    socketio.run(app, debug=True)
+if __name__ == "__main__":
+    socketio.run(app, host='0.0.0.0', port=8080)
 
