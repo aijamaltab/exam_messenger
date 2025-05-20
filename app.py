@@ -40,17 +40,13 @@ def register():
         name = request.form['name']
         phone = request.form['phone']
         password = generate_password_hash(request.form['password'])
-        avatar_file = request.files['avatar']
-        avatar_filename = secure_filename(avatar_file.filename)
-        avatar_path = os.path.join(app.config['UPLOAD_FOLDER'], avatar_filename)
-        avatar_file.save(avatar_path)
 
         conn = get_connection()
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "INSERT INTO users (name, phone, password, avatar_url) VALUES (%s, %s, %s, %s)",
-                (name, phone, password, avatar_filename)
+                "INSERT INTO users (name, phone, password) VALUES (%s, %s, %s, %s)",
+                (name, phone, password)
             )
             conn.commit()
         except:
@@ -65,7 +61,7 @@ def chat():
         return redirect('/login')
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, phone, avatar_url FROM users WHERE id != %s", (session['user_id'],))
+    cursor.execute("SELECT id, name, phone FROM users WHERE id != %s", (session['user_id'],))
     users = cursor.fetchall()
     conn.close()
     return render_template('chat.html', users=users, current_user=session['user_name'])
@@ -155,7 +151,7 @@ def get_users():
 
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, phone, avatar_url FROM users WHERE id != %s", (session['user_id'],))
+    cursor.execute("SELECT id, name, phone FROM users WHERE id != %s", (session['user_id'],))
     users = cursor.fetchall()
     conn.close()
 
@@ -164,8 +160,8 @@ def get_users():
         users_list.append({
             'id': u[0],
             'name': u[1],
-            'phone': u[2],
-            'avatar': u[3]
+            'phone': u[2]
+
         })
     return {'users': users_list}
 
