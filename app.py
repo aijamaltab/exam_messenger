@@ -1,6 +1,5 @@
 import os
 from flask import Flask, render_template, request, redirect, session, url_for, jsonify, send_from_directory
-import mysql.connector
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_connection
