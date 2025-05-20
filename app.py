@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, redirect, session, url_for, jsonify, send_from_directory
+from flask import Flask, render_template, request, redirect, session, url_for, jsonify, send_from_directory, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_connection
@@ -11,7 +11,7 @@ app.secret_key = 'your_strong_secret_key'
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
+last_message_id = 0
 
 @app.route('/')
 def home():
@@ -144,7 +144,23 @@ def get_messages(user_id):
 
     return jsonify(messages)
 
+@app.route('/check-new-messages')
+def check_new_messages():
+    global last_message_id
+    client_last_id = int(request.args.get('last_id', 0))
 
+    if last_message_id > client_last_id:
+        return jsonify({'hasNew': True, 'last_id': last_message_id})
+    else:
+        return jsonify({'hasNew': False, 'last_id': last_message_id})
+
+# Тут код для добавления сообщений, где нужно обновлять last_message_id
+@app.route('/add-message', methods=['POST'])
+def add_message():
+    global last_message_id
+    # Логика добавления сообщения
+    last_message_id += 1
+    return 'OK'
 
 @app.route('/logout')
 def logout():
