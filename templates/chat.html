@@ -51,7 +51,7 @@
     data.users.forEach(user => {
       const li = document.createElement("li");
       li.innerHTML = `
-        <img src="/static/uploads/${user.avatar}" width="30" height="30" style="border-radius:50%; margin-right:10px;">
+        
         <strong>${user.name}</strong><br><small>${user.phone}</small>
       `;
       li.onclick = () => {
