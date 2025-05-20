@@ -3,6 +3,7 @@ from flask import Flask, render_template, request, redirect, session, url_for, j
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_connection
+
 from datetime import datetime
 
 app = Flask(__name__)
@@ -10,6 +11,8 @@ app.secret_key = 'your_strong_secret_key'
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+port = int(os.environ.get("PORT", 8080))
+app.run(host="0.0.0.0", port=port)
 
 @app.route('/')
 def home():
