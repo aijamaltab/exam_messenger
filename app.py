@@ -45,7 +45,7 @@ def register():
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "INSERT INTO users (name, phone, password) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO users (name, phone, password) VALUES (%s, %s, %s)",
                 (name, phone, password)
             )
             conn.commit()
