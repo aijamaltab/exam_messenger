@@ -5,3 +5,4 @@ python-dotenv
 werkzeug
 dj-database-url
 flask-socketio
+eventlet
