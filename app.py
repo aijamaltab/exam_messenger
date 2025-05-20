@@ -3,6 +3,7 @@ from flask import Flask, render_template, request, redirect, session, url_for, j
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_connection
+from flask_socketio import SocketIO, emit
 
 from datetime import datetime
 
@@ -11,7 +12,7 @@ app.secret_key = 'your_strong_secret_key'
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-last_message_id = 0
+socketio = SocketIO(app)
 
 @app.route('/')
 def home():
@@ -193,4 +194,11 @@ def get_users():
         })
     return {'users': users_list}
 
+@app.route('/add-message')
+def add_message():
+    # Когда приходит новое сообщение — уведомляем всех клиентов
+    socketio.emit('new_message', {'msg': 'Появилось новое сообщение!'})
+    return "Message sent!"
 
+if __name__ == '__main__':
+    socketio.run(app, debug=True)
