@@ -8,11 +8,12 @@ from flask_socketio import SocketIO, emit
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = 'your_strong_secret_key'
+
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 socketio = SocketIO(app)
+last_message_id = 0
 
 @app.route('/')
 def home():
@@ -82,41 +83,47 @@ def chat():
 @app.route('/send', methods=['POST'])
 def send():
     try:
-        print("Получен запрос на отправку")
-        print("Session user:", session.get('user_id'))
         data = request.get_json()
-        print("Полученные данные:", data)
-
         from_user_id = session.get('user_id')
         to_user_id = data.get('to_user_id')
         message = data.get('message')  
 
         if not from_user_id or not to_user_id or not message:
-            print("Ошибка: пустые данные")
             return jsonify({'error': 'Invalid data'}), 400
 
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO messages (sender_id, receiver_id, message) VALUES (%s, %s, %s)",
+            "INSERT INTO messages (sender_id, receiver_id, message) VALUES (%s, %s, %s) RETURNING id",
             (from_user_id, to_user_id, message)
         )
+        message_id = cursor.fetchone()[0]
         conn.commit()
         conn.close()
 
+        global last_message_id
+        last_message_id = message_id  # обновляем id последнего сообщения
+
+        socketio.emit('new_message', {
+            'message': message,
+            'from_user_id': from_user_id,
+            'to_user_id': to_user_id,
+            'message_id': message_id
+        })
+
         return jsonify({'message': 'OK'}), 200
     except Exception as e:
-        print("ОШИБКА НА СЕРВЕРЕ:", e)
         return jsonify({'error': 'Server error', 'details': str(e)}), 500
 
 
 def serialize_message(msg, current_user_id):
     return {
         "id": msg.id,
-        "message": msg.messages,
-        "from_me": msg.from_user_id == current_user_id,
-        "timestamp": msg.timestamp.strftime('%H:%M')  # формат только время, как в WhatsApp
+        "message": msg.message,
+        "from_me": msg.sender_id == current_user_id,
+        "timestamp": msg.timestamp.strftime('%H:%M')
     }
+
 
 @app.route('/messages/<int:user_id>')
 def get_messages(user_id):
@@ -155,14 +162,6 @@ def check_new_messages():
     else:
         return jsonify({'hasNew': False, 'last_id': last_message_id})
 
-# Тут код для добавления сообщений, где нужно обновлять last_message_id
-@app.route('/add-message', methods=['POST'])
-def add_message():
-    global last_message_id
-    # Логика добавления сообщения
-    last_message_id += 1
-    return 'OK'
-
 @app.route('/logout')
 def logout():
     session.clear()
@@ -194,11 +193,16 @@ def get_users():
         })
     return {'users': users_list}
 
-@app.route('/add-message')
-def add_message():
-    # Когда приходит новое сообщение — уведомляем всех клиентов
-    socketio.emit('new_message', {'msg': 'Появилось новое сообщение!'})
-    return "Message sent!"
+
+def get_last_message_id():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COALESCE(MAX(id), 0) FROM messages")
+    last_id = cursor.fetchone()[0]
+    conn.close()
+    return last_id
 
 if __name__ == '__main__':
+    last_message_id = get_last_message_id()
     socketio.run(app, debug=True)
+
