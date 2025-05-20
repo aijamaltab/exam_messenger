@@ -122,7 +122,7 @@ def get_messages(user_id):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT sender_id, messages, file_url, timestamp FROM messages
+        SELECT sender_id, messages, file_path, timestamp FROM messages
         WHERE (sender_id = %s AND receiver_id = %s)
            OR (sender_id = %s AND receiver_id = %s)
         ORDER BY timestamp
@@ -131,11 +131,11 @@ def get_messages(user_id):
     conn.close()
 
     messages = []
-    for sender_id, messages, file_url, timestamp in data:
+    for sender_id, messages, file_path, timestamp in data:
         messages.append({
             'from_me': sender_id == session['user_id'],
             'message': messages,
-            'file_url': file_url,
+            'file_path': file_path,
             'timestamp': timestamp.strftime('%H:%M')  # Только время как в WhatsApp
         })
 
