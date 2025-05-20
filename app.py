@@ -85,17 +85,17 @@ def send():
 
         from_user_id = session.get('user_id')
         to_user_id = data.get('to_user_id')
-        messages = data.get('messages')
+        message = data.get('content')  # или можно просто 'message', зависит как в JS
 
-        if not from_user_id or not to_user_id or not messages:
+        if not from_user_id or not to_user_id or not message:
             print("Ошибка: пустые данные")
             return jsonify({'error': 'Invalid data'}), 400
 
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO messages (sender_id, receiver_id, messages) VALUES (%s, %s, %s)",
-            (from_user_id, to_user_id, messages)
+            "INSERT INTO messages (sender_id, receiver_id, message) VALUES (%s, %s, %s)",
+            (from_user_id, to_user_id, message)
         )
         conn.commit()
         conn.close()
@@ -122,7 +122,7 @@ def get_messages(user_id):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT sender_id, messages, file_path, timestamp FROM messages
+        SELECT sender_id, message, file_path, timestamp FROM messages
         WHERE (sender_id = %s AND receiver_id = %s)
            OR (sender_id = %s AND receiver_id = %s)
         ORDER BY timestamp
@@ -131,15 +131,16 @@ def get_messages(user_id):
     conn.close()
 
     messages = []
-    for sender_id, messages, file_path, timestamp in data:
+    for sender_id, message, file_path, timestamp in data:
         messages.append({
             'from_me': sender_id == session['user_id'],
-            'message': messages,
+            'message': message,
             'file_path': file_path,
-            'timestamp': timestamp.strftime('%H:%M')  # Только время как в WhatsApp
+            'timestamp': timestamp.strftime('%H:%M')
         })
 
     return jsonify(messages)
+
 
 
 @app.route('/logout')
