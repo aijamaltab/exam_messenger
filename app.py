@@ -85,7 +85,7 @@ def send():
 
         from_user_id = session.get('user_id')
         to_user_id = data.get('to_user_id')
-        message = data.get('content')  # или можно просто 'message', зависит как в JS
+        message = data.get('message')  
 
         if not from_user_id or not to_user_id or not message:
             print("Ошибка: пустые данные")
