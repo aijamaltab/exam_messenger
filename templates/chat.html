@@ -18,19 +18,19 @@
 
       <div class="chat">
         <div class="chat-header">
-          <h3 id="chat-with">Выберите пользователя</h3>
+          <h3 id="chat-with">Select a user</h3>
         </div>
 
         <div id="chat-box" class="chat-box"></div>
 
         <div class="chat-controls">
-          <input type="text" id="messageInput" placeholder="Введите сообщение">
+          <input type="text" id="messageInput" placeholder="Enter a message">
           <button onclick="sendMessage()">➤</button>
         </div>
       </div>
     </div>
   {% else %}
-    <p>Пожалуйста, <a href="{{ url_for('login') }}">войдите</a> в систему.</p>
+    <p>Please, <a href="{{ url_for('login') }}">log in</a> to the system.</p>
   {% endif %}
 
   <script>
