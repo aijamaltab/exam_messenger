@@ -11,8 +11,7 @@ app.secret_key = 'your_strong_secret_key'
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-port = int(os.environ.get("PORT", 8080))
-app.run(host="0.0.0.0", port=port)
+
 
 @app.route('/')
 def home():
@@ -171,6 +170,3 @@ def get_users():
     return {'users': users_list}
 
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
