@@ -45,7 +45,7 @@ def register():
             return 'Все поля обязательны'
 
         password = generate_password_hash(raw_password)
-        print(f"Регистрация: name={name}, phone={phone}, password_hash={password}")
+        print(f"[LOG] Регистрация: name={name}, phone={phone}, password_hash={password}")
 
         try:
             conn = get_connection()
@@ -55,13 +55,16 @@ def register():
                 (name, phone, password)
             )
             conn.commit()
+            cursor.close()
             conn.close()
+            print("[LOG] Пользователь успешно зарегистрирован")
         except Exception as e:
-            print("Ошибка при регистрации:", e)
-            return 'Такой номер уже зарегистрирован или другая ошибка'
+            print("[ERROR] Ошибка при регистрации:", e)
+            return 'Такой номер уже зарегистрирован или произошла другая ошибка'
 
         return redirect('/login')
     return render_template('register.html')
+
 
 @app.route('/chat')
 def chat():
