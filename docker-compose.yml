@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  asterisk:
+    image: andrius/asterisk
+    container_name: asterisk
+    ports:
+      - "5060:5060/udp"
+      - "8089:8089/tcp"
+      - "10000-20000:10000-20000/udp"
+    volumes:
+      - ./asterisk-config:/etc/asterisk
+    restart: unless-stopped

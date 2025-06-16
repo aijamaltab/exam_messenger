@@ -1,16 +1,31 @@
 import os
+from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, session, url_for, jsonify, send_from_directory
-import mysql.connector
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_connection
 from datetime import datetime
 
+# Загрузка env-переменных
+load_dotenv()
+
 app = Flask(__name__)
-app.secret_key = 'your_strong_secret_key'
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'your_default_secret')
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+@app.route('/sip-config', methods=['GET'])
+def sip_config():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    return jsonify({
+        'wsServers': [os.getenv('SIP_WS_URI')],
+        'uri': f"{os.getenv('SIP_USER')}@{os.getenv('SIPS_DOMAIN')}",
+        'authorizationUser': os.getenv('SIP_USER'),
+        'password': os.getenv('SIP_PASS'),
+        'iceServers': [{'urls': ['stun:stun.l.google.com:19302']}]
+    })
 
 @app.route('/')
 def home():
@@ -52,7 +67,7 @@ def register():
                 (name, phone, password, avatar_filename)
             )
             conn.commit()
-        except:
+        except Exception:
             return 'Такой номер уже зарегистрирован'
         conn.close()
         return redirect('/login')
@@ -69,51 +84,28 @@ def chat():
     conn.close()
     return render_template('chat.html', users=users, current_user=session['user_name'])
 
-
 @app.route('/send', methods=['POST'])
 def send():
-    try:
-        print("Получен запрос на отправку")
-        print("Session user:", session.get('user_id'))
-        data = request.get_json()
-        print("Полученные данные:", data)
-
-        from_user_id = session.get('user_id')
-        to_user_id = data.get('to_user_id')
-        content = data.get('content')
-
-        if not from_user_id or not to_user_id or not content:
-            print("Ошибка: пустые данные")
-            return jsonify({'error': 'Invalid data'}), 400
-
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO messages (sender_id, receiver_id, content) VALUES (%s, %s, %s)",
-            (from_user_id, to_user_id, content)
-        )
-        conn.commit()
-        conn.close()
-
-        return jsonify({'message': 'OK'}), 200
-    except Exception as e:
-        print("ОШИБКА НА СЕРВЕРЕ:", e)
-        return jsonify({'error': 'Server error', 'details': str(e)}), 500
-
-
-def serialize_message(msg, current_user_id):
-    return {
-        "id": msg.id,
-        "message": msg.content,
-        "from_me": msg.from_user_id == current_user_id,
-        "timestamp": msg.timestamp.strftime('%H:%M')  # формат только время, как в WhatsApp
-    }
+    data = request.get_json()
+    from_user_id = session.get('user_id')
+    to_user_id = data.get('to_user_id')
+    content = data.get('content')
+    if not from_user_id or not to_user_id or not content:
+        return jsonify({'error': 'Invalid data'}), 400
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO messages (sender_id, receiver_id, content) VALUES (%s, %s, %s)",
+        (from_user_id, to_user_id, content)
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'OK'}), 200
 
 @app.route('/messages/<int:user_id>')
 def get_messages(user_id):
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
-
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -131,11 +123,9 @@ def get_messages(user_id):
             'from_me': sender_id == session['user_id'],
             'message': content,
             'file_url': file_url,
-            'timestamp': timestamp.strftime('%H:%M')  # Только время как в WhatsApp
+            'timestamp': timestamp.strftime('%H:%M')
         })
-
     return jsonify(messages)
-
 
 @app.route('/logout')
 def logout():
@@ -150,24 +140,15 @@ def uploaded_file(filename):
 def get_users():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
-
-
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id, name, phone, avatar_url FROM users WHERE id != %s", (session['user_id'],))
     users = cursor.fetchall()
     conn.close()
-
     users_list = []
     for u in users:
-        users_list.append({
-            'id': u[0],
-            'name': u[1],
-            'phone': u[2],
-            'avatar': u[3]
-        })
+        users_list.append({'id': u[0], 'name': u[1], 'phone': u[2], 'avatar': u[3]})
     return {'users': users_list}
 
-
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5000)), debug=True)

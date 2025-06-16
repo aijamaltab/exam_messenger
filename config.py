@@ -10,7 +10,7 @@ def get_connection():
     if db_url is None:
         raise ValueError("DATABASE_URL not set!")
 
-    # Парсим URL (Railway даёт URL вида postgresql://...)
+    
     result = urlparse(db_url)
 
     return psycopg2.connect(
@@ -19,5 +19,5 @@ def get_connection():
         database=result.path.lstrip("/"),
         user=result.username,
         password=result.password,
-        sslmode="require"  # Railway требует SSL
+        sslmode="require" 
     )
