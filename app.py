@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, redirect, session, jsonify, send_from_directory
+from flask import Flask, render_template, request, redirect, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_socketio import SocketIO, emit
@@ -7,36 +7,23 @@ from datetime import datetime
 from dotenv import load_dotenv
 import mysql.connector
 from urllib.parse import urlparse
-from twilio.twiml.voice_response import VoiceResponse
-from twilio.rest import Client
-import eventlet
 
 # Load environment variables
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 
-eventlet.monkey_patch()
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "fallback-secret")
+app.secret_key = os.getenv('SECRET_KEY')
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 socketio = SocketIO(app)
 last_message_id = 0
 
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN  = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_NUMBER      = os.getenv("TWILIO_PHONE_NUMBER")
-
-if not all([TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_NUMBER]):
-    raise RuntimeError("Не заданы переменные TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN или TWILIO_PHONE_NUMBER")
-client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-
 # MySQL connection helper
 def get_connection():
     db_url = os.getenv('DATABASE_URL')
     if db_url:
-        # Parse URL like mysql://user:pass@host:port/dbname
         result = urlparse(db_url)
         config = {
             'host':     result.hostname,
@@ -46,7 +33,6 @@ def get_connection():
             'database': result.path.lstrip('/')
         }
     else:
-        # fallback to individual ENV
         config = {
             'host':     os.getenv('DB_HOST',     'localhost'),
             'port':     int(os.getenv('DB_PORT',  3306)),
@@ -54,58 +40,25 @@ def get_connection():
             'password': os.getenv('DB_PASSWORD', ''),
             'database': os.getenv('DB_NAME',     '')
         }
-    # DEBUG: залогировать параметры (кроме пароля)  
     print(f">> Connecting to MySQL: {config['user']}@{config['host']}:{config['port']}/{config['database']}")
     return mysql.connector.connect(**config)
 
-# @app.route('/sip-config', methods=['GET'])
-# def sip_config():
-#     if 'user_id' not in session:
-#         return jsonify({'error': 'Unauthorized'}), 401
-#     return jsonify({
-#         'wsServers':         [os.getenv('SIP_WS_URI')],
-#         'uri':               f"sip:{os.getenv('SIP_USER')}@{os.getenv('SIPS_DOMAIN')}",
-#         'authorizationUser': os.getenv('SIP_USER'),
-#         'password':          os.getenv('SIP_PASS'),
-#         'domain':            os.getenv('SIPS_DOMAIN'),
-#         'iceServers':        [{'urls': ['stun:stun.l.google.com:19302']}]
-#     })
-
-@app.route('/make_call', methods=['GET'])
-def make_call_form():
-    # Простая страница с формой, куда вводить номер для звонка
-    return render_template('call.html')
-
-# ========== Запуск звонка ==========
-@app.route("/call", methods=["POST"])
-def call():
-    to_number = request.form.get("phone")
-    if not to_number:
-        return jsonify({"error": "Phone number is required"}), 400
-
-    try:
-        call = client.calls.create(
-            to=to_number,
-            from_=TWILIO_NUMBER,
-            # этот URL должен быть публичным и принимать POST-запросы от Twilio
-            url=request.url_root + "voice"
-        )
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-    return jsonify({"status": "call_started", "sid": call.sid})
-
-# ========== Обработка webhook от Twilio ==========
-@app.route("/voice", methods=["POST"])
-def voice():
-    response = VoiceResponse()
-    response.say("Привет! Это звонок с сайта.", language="ru-RU")
-    return Response(str(response), mimetype='text/xml')
-
+@app.route('/sip-config', methods=['GET'])
+def sip_config():
+    if 'user_id' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    return jsonify({
+        'wsServers':         [os.getenv('SIP_WS_URI')],
+        'uri':               f"sip:{os.getenv('SIP_USER')}@{os.getenv('SIPS_DOMAIN')}",
+        'authorizationUser': os.getenv('SIP_USER'),
+        'password':          os.getenv('SIP_PASS'),
+        'domain':            os.getenv('SIPS_DOMAIN'),
+        'iceServers':        [{'urls': ['stun:stun.l.google.com:19302']}]
+    })
 
 @app.route('/')
 def home():
-    return redirect('/login') if 'user_id' in session else redirect('/login')
+    return redirect('/chat') if 'user_id' in session else redirect('/login')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -212,10 +165,6 @@ def get_messages(user_id):
 def logout():
     session.clear()
     return redirect('/login')
-
-@app.route('/uploads/<filename>')
-def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
