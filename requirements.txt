@@ -6,3 +6,4 @@ python-dotenv
 asterisk-ami
 werkzeug
 gunicorn
+sip.js
