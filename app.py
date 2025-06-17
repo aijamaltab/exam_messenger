@@ -51,18 +51,18 @@ def sip_config():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
     return jsonify({
-        'wsServers':         [os.getenv('SIP_WS_URI')],              # WebSocket URL
-        'uri':               f"sip:{os.getenv('SIP_USER')}@{os.getenv('SIPS_DOMAIN')}",  
+        'wsServers':         [os.getenv('SIP_WS_URI')],
+        'uri':               f"sip:{os.getenv('SIP_USER')}@{os.getenv('SIPS_DOMAIN')}",
         'authorizationUser': os.getenv('SIP_USER'),
         'password':          os.getenv('SIP_PASS'),
-        'domain':            os.getenv('SIPS_DOMAIN'),               # <-- вот это
+        'domain':            os.getenv('SIPS_DOMAIN'),
         'iceServers':        [{'urls': ['stun:stun.l.google.com:19302']}]
     })
 
 
 @app.route('/')
 def home():
-    return redirect('/chat') if 'user_id' in session else redirect('/login')
+    return redirect('/login') if 'user_id' in session else redirect('/login')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
