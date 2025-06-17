@@ -1,1 +1,1 @@
-web: gunicorn app:app --worker-class eventlet -w 1 --log-level debug --capture-output
+web: gunicorn app:app --worker-class eventlet --bind 0.0.0.0:$PORT
