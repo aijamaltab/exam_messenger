@@ -183,6 +183,21 @@ a:hover {
   border: 1px solid #ddd;
 }
 
+.my-message {
+  text-align: right;
+  color: blue;
+  margin: 5px;
+}
+.their-message {
+  text-align: left;
+  color: green;
+  margin: 5px;
+}
+.user-item.selected {
+  background-color: #d0ebff;
+}
+
+
 .timestamp {
   font-size: 10px;
   color: #999;
