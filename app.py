@@ -6,6 +6,7 @@ from flask_socketio import SocketIO, emit
 from datetime import datetime
 from dotenv import load_dotenv
 import mysql.connector
+from urllib.parse import urlparse
 
 # Load environment variables
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -21,13 +22,29 @@ last_message_id = 0
 
 # MySQL connection helper
 def get_connection():
-    return mysql.connector.connect(
-        host=os.getenv('DB_HOST'),
-        port=int(os.getenv('DB_PORT', 3306)),
-        user=os.getenv('DB_USER'),
-        password=os.getenv('DB_PASSWORD'),
-        database=os.getenv('DB_NAME')
-    )
+    db_url = os.getenv('DATABASE_URL')
+    if db_url:
+        # Parse URL like mysql://user:pass@host:port/dbname
+        result = urlparse(db_url)
+        config = {
+            'host':     result.hostname,
+            'port':     result.port,
+            'user':     result.username,
+            'password': result.password,
+            'database': result.path.lstrip('/')
+        }
+    else:
+        # fallback to individual ENV
+        config = {
+            'host':     os.getenv('DB_HOST',     'localhost'),
+            'port':     int(os.getenv('DB_PORT',  3306)),
+            'user':     os.getenv('DB_USER',     ''),
+            'password': os.getenv('DB_PASSWORD', ''),
+            'database': os.getenv('DB_NAME',     '')
+        }
+    # DEBUG: залогировать параметры (кроме пароля)  
+    print(f">> Connecting to MySQL: {config['user']}@{config['host']}:{config['port']}/{config['database']}")
+    return mysql.connector.connect(**config)
 
 @app.route('/sip-config', methods=['GET'])
 def sip_config():
