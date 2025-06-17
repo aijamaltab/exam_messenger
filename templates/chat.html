@@ -9,7 +9,7 @@
 
 </head>
 <body>
-  {% if session['user_id'] %}
+  {% if session.get('user_id') %}
     <div class="container">
       <div class="sidebar">
         <form action="{{ url_for('logout') }}" method="GET" style="margin: 0;">
@@ -110,4 +110,6 @@
     if (session) session.bye();
   };
 </script>
-
+  {% endif %}
+</body>
+</html>
