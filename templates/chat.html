@@ -16,7 +16,14 @@
           <button type="submit" style="cursor: pointer;">Logout</button>
         </form>
         <h2>Users</h2>
-        <ul id="users" class="user-list"></ul>
+        <ul id="users" class="user-list">
+          {% for user in users %}
+            <li class="user-item" data-id="{{ user[0] }}">
+              <strong>{{ user[1] }}</strong><br>
+              <small>{{ user[2] }}</small>
+            </li>
+          {% endfor %}
+        </ul>
       </div>
 
       <div class="chat">
