@@ -5,7 +5,8 @@
   <title>Messenger Aijamal</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <!-- SIP.js библиотека -->
-  <script src="https://cdn.jsdelivr.net/npm/sip.js@0.21.2/dist/sip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sip.js@0.21.2/dist/sip.min.js" defer></script>
+
 
 
 
@@ -139,6 +140,7 @@
             
               console.log("Звонок на", phoneNumber);
             }
+
       
       callBtn.onclick = () => {
         const number = prompt("Введите номер телефона (например, 79991234567):");
