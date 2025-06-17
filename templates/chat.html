@@ -1,176 +1,49 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Messenger Aijamal</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <!-- SIP.js -->
-  <script src="https://cdn.jsdelivr.net/npm/sip.js@0.21.2/dist/sip.min.js"></script>
+  <meta charset="utf-8">
+  <title>Sellinx Звонилка</title>
+  <script src="https://cdn.jsdelivr.net/npm/jssip@3.10.0/dist/jssip.min.js"></script>
 </head>
 <body>
-  {% if session.get('user_id') %}
-  <div class="container">
-    <div class="sidebar">
-      <form action="{{ url_for('logout') }}" method="GET" style="margin: 0;">
-        <button type="submit" style="cursor: pointer;">Logout</button>
-      </form>
-      <h2>Users</h2>
-      <ul id="users" class="user-list">
-        {% for user in users %}
-        <li class="user-item"
-            data-id="{{ user[0] }}"
-            data-name="{{ user[1] }}"
-            data-phone="{{ user[2] }}">
-          <strong>{{ user[1] }}</strong><br>
-          <small>{{ user[2] }}</small>
-        </li>
-        {% endfor %}
-      </ul>
-    </div>
-
-    <div class="chat">
-      <div class="chat-header">
-        <h3 id="chat-with">Выберите пользователя</h3>
-      </div>
-
-      <div id="chat-box" class="chat-box"></div>
-
-      <div class="chat-controls">
-        <input type="text" id="messageInput" placeholder="Введите сообщение">
-        <button id="sendBtn">➤</button>
-        <button id="callBtn" disabled>📞 Call</button>
-        <button id="hangupBtn" disabled>✖ Hangup</button>
-      </div>
-    </div>
-  </div>
+  <h2>📞 Звонок через Antisip (sellinx)</h2>
+  <input id="target" placeholder="Введите номер, например: sip:username@sip.antisip.com" />
+  <br><br>
+  <button onclick="call()">Позвонить</button>
+  <button onclick="hangup()">Сбросить</button>
 
   <script>
-  let selectedUserId = null;
-  let selectedUserName = '';
-  let selectedUserPhone = '';
-  const chatBox = document.getElementById('chat-box');
-  const chatWith = document.getElementById('chat-with');
-  const sendBtn = document.getElementById('sendBtn');
-  const callBtn = document.getElementById('callBtn');
-  const hangupBtn = document.getElementById('hangupBtn');
-  const messageInput = document.getElementById('messageInput');
+    const socket = new JsSIP.WebSocketInterface('wss://sip.antisip.com:7443');
 
-  // SIP.js variables
-  let userAgent, sipSession, sipConfig;
+    const configuration = {
+      sockets: [socket],
+      uri: 'sip:sellinx@sip.antisip.com',
+      password: 'Aijamal29062004',
+      display_name: 'Jama Tab',
+    };
 
-  // 1) Выбор пользователя из списка
-  document.querySelectorAll('.user-item').forEach(item => {
-    item.addEventListener('click', () => {
-      selectedUserId    = item.dataset.id;
-      selectedUserName  = item.dataset.name;
-      selectedUserPhone = item.dataset.phone;
-      chatWith.textContent = `Chat with ${selectedUserName}`;
-      callBtn.disabled = false;
-      loadMessages();
-    });
-  });
+    const ua = new JsSIP.UA(configuration);
+    ua.start();
 
-  // 2) Загрузка сообщений
-  function loadMessages() {
-    fetch(`/messages/${selectedUserId}`)
-      .then(res => res.json())
-      .then(msgs => {
-        chatBox.innerHTML = '';
-        msgs.forEach(m => {
-          const div = document.createElement('div');
-          div.className = m.from_me ? 'message me' : 'message other';
-          div.textContent = m.message;
-          chatBox.appendChild(div);
-        });
-        chatBox.scrollTop = chatBox.scrollHeight;
+    let session;
+
+    function call() {
+      const target = document.getElementById('target').value;
+      session = ua.call(target, {
+        mediaConstraints: { audio: true, video: false }
       });
-  }
-
-  // 3) Отправка сообщения
-  sendBtn.onclick = () => {
-    const text = messageInput.value.trim();
-    if (!selectedUserId || !text) return;
-    fetch('/send', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ to_user_id: selectedUserId, message: text })
-    })
-    .then(res => res.json())
-    .then(res => {
-      if (res.status === 'sent') {
-        messageInput.value = '';
-        loadMessages();
-      }
-    });
-  };
-
-  // 4) Инициализация SIP.js
-  fetch('/sip-config')
-    .then(r => r.ok ? r.json() : Promise.reject(r.status))
-    .then(cfg => {
-      sipConfig = cfg;
-      userAgent = new SIP.UserAgent({
-        uri: cfg.uri,
-        transportOptions: { server: cfg.wsServers },
-        authorizationUsername: cfg.authorizationUser,
-        authorizationPassword: cfg.password,
-        sessionDescriptionHandlerFactoryOptions: {
-          peerConnectionOptions: { iceServers: cfg.iceServers }
-        }
-      });
-
-      // Обработка входящего вызова
-      userAgent.delegate = {
-        onInvite(invitation) {
-          sipSession = invitation;
-          invitation.accept();
-          hangupBtn.disabled = false;
-          callBtn.disabled = true;
-          invitation.stateChange.addListener(state => {
-            if (state === SIP.SessionState.Terminated) {
-              hangupBtn.disabled = true;
-              callBtn.disabled = false;
-            }
-          });
-        }
-      };
-
-      return userAgent.start();
-    })
-    .then(() => {
-      console.log('SIP UserAgent started');
-    })
-    .catch(err => console.error('SIP error:', err));
-
-  // 5) Совершение исходящего звонка
-  callBtn.onclick = () => {
-    if (!userAgent || !selectedUserPhone) return;
-    const targetURI = SIP.UserAgent.makeURI(`sip:${selectedUserPhone}@${sipConfig.domain}`);
-    sipSession = userAgent.invite(targetURI, {
-      sessionDescriptionHandlerOptions: { constraints: { audio: true, video: false } }
-    });
-    sipSession.stateChange.addListener(state => {
-      if (state === SIP.SessionState.Established) {
-        hangupBtn.disabled = false;
-        callBtn.disabled = true;
-      }
-      if (state === SIP.SessionState.Terminated) {
-        hangupBtn.disabled = true;
-        callBtn.disabled = false;
-      }
-    });
-  };
-
-  // 6) Завершение звонка
-  hangupBtn.onclick = () => {
-    if (sipSession) {
-      sipSession.bye();
-      sipSession = null;
-      hangupBtn.disabled = true;
-      callBtn.disabled = false;
     }
-  };
+
+    function hangup() {
+      if (session) session.terminate();
+    }
+
+    ua.on('newRTCSession', function(e) {
+      if (e.originator === 'remote') {
+        session = e.session;
+        session.answer({ mediaConstraints: { audio: true, video: false } });
+      }
+    });
   </script>
-  {% endif %}
 </body>
 </html>
