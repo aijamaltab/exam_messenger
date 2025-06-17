@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Messenger Aijamal</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/sip.js@0.21.2/dist/sip.min.js"></script>
 </head>
 <body>
   {% if session.get('user_id') %}
@@ -17,7 +18,7 @@
       <ul id="users" class="user-list">
         {% for user in users %}
           <li class="user-item" data-id="{{ user[0] }}">
-            <strong>{{ user[1] }}</strong><br>
+            <strong>{{ user[1] }}</strong><br />
             <small>{{ user[2] }}</small>
           </li>
         {% endfor %}
@@ -32,9 +33,10 @@
       <div id="chat-box" class="chat-box"></div>
 
       <div class="chat-controls">
-        <input type="text" id="messageInput" placeholder="Enter a message">
+        <input type="text" id="messageInput" placeholder="Enter a message" />
         <button onclick="sendMessage()">➤</button>
-        <button id="callBtn">📞 Call</button>
+        <button id="callBtn" disabled>📞 Call</button>
+        <button id="hangupBtn" disabled>✖ Hangup</button>
       </div>
     </div>
   </div>
@@ -42,7 +44,7 @@
   <script>
     // Загрузка сообщений при выборе пользователя
     document.querySelectorAll('.user-item').forEach(item => {
-      item.addEventListener('click', function() {
+      item.addEventListener('click', function () {
         const userId = this.getAttribute('data-id');
         document.getElementById('chat-with').textContent = `Chat with ${this.querySelector('strong').textContent}`;
         fetch(`/messages/${userId}`)
@@ -60,33 +62,98 @@
       });
     });
 
-    // Звонок через Twilio
-    document.getElementById('callBtn').addEventListener('click', async () => {
-      const phone = prompt("Введите номер телефона (например, +996XXXXXXXXX):");
-      if (!phone) return;
-
-      const formData = new FormData();
-      formData.append("phone", phone);
-
-      const res = await fetch("/call", {
-        method: "POST",
-        body: formData
-      });
-
-      const result = await res.json();
-      if (result.status === "call_started") {
-        alert("Звонок начался! SID: " + result.sid);
-      } else {
-        alert("Ошибка при звонке.");
-      }
-    });
-
-    // Функция отправки сообщений
     function sendMessage() {
-      const message = document.getElementById('messageInput').value;
-      // Тут нужно добавить отправку сообщения на сервер
-      alert("Отправка сообщений пока не реализована");
+      const message = document.getElementById('messageInput').value.trim();
+      if (!message) {
+        alert('Введите сообщение');
+        return;
+      }
+      // Реализуй отправку сообщения на сервер
+      alert('Отправка сообщений пока не реализована');
     }
+
+    const callBtn = document.getElementById('callBtn');
+    const hangupBtn = document.getElementById('hangupBtn');
+    let userAgent, session;
+    let cfg = null;
+
+    // Получаем SIP-конфиг и создаём UserAgent
+    fetch('/sip-config')
+      .then(res => {
+        if (!res.ok) throw new Error('SIP-config error');
+        return res.json();
+      })
+      .then(config => {
+        cfg = config;
+
+        userAgent = new SIP.UserAgent({
+          uri: `sip:${cfg.authorizationUser}@${cfg.domain}`,
+          transportOptions: {
+            server: cfg.wsServers // строка или массив
+          },
+          authorizationUsername: cfg.authorizationUser,
+          authorizationPassword: cfg.password,
+          sessionDescriptionHandlerFactoryOptions: {
+            peerConnectionOptions: { iceServers: cfg.iceServers }
+          }
+        });
+
+        userAgent.delegate = {
+          onInvite(invitation) {
+            session = invitation;
+            invitation.accept();
+            hangupBtn.disabled = false;
+            callBtn.disabled = true;
+            invitation.stateChange.addListener(state => {
+              if (state === SIP.SessionState.Terminated) {
+                hangupBtn.disabled = true;
+                callBtn.disabled = false;
+                session = null;
+              }
+            });
+          }
+        };
+
+        userAgent.start()
+          .then(() => callBtn.disabled = false)
+          .catch(err => console.error('UA start failed:', err));
+      })
+      .catch(err => console.error(err));
+
+    function makeCall(phoneNumber) {
+      if (!userAgent || !cfg) return alert("SIP UserAgent не готов");
+      const target = SIP.UserAgent.makeURI(`sip:${phoneNumber}@${cfg.domain}`);
+      if (!target) return alert('Неверный номер для звонка');
+      session = userAgent.invite(target, {
+        sessionDescriptionHandlerOptions: {
+          constraints: { audio: true, video: false }
+        }
+      });
+      hangupBtn.disabled = false;
+      callBtn.disabled = true;
+      console.log("Calling", phoneNumber);
+
+      session.stateChange.addListener(state => {
+        if (state === SIP.SessionState.Terminated) {
+          hangupBtn.disabled = true;
+          callBtn.disabled = false;
+          session = null;
+        }
+      });
+    }
+
+    callBtn.onclick = () => {
+      const number = prompt("Введите номер телефона (например, 79991234567):");
+      if (number) {
+        makeCall(number);
+      }
+    };
+
+    hangupBtn.onclick = () => {
+      if (session) {
+        session.bye();
+      }
+    };
   </script>
 
   {% endif %}
