@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <title>Messenger Aijamal</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+  <!-- SIP.js библиотека -->
+  <script src="https://cdn.jsdelivr.net/npm/sip.js@0.21.2/dist/sip.min.js"></script>
+
   <!-- Подключение SIP.js -->
   <script src="https://cdn.jsdelivr.net/npm/sip.js@0.20.0/dist/sip.js"></script>
 </head>
@@ -38,84 +40,155 @@
     <script>
       const socket = io();
       let selectedUserId = null;
-      let sipUA = null;
-      let currentCall = null;
-
-      // Инициализация SIP.js
+      let userAgent = null;
+      let currentSession = null;
+    
+      // === Инициализация SIP.js ===
       fetch('/sip-config')
-        .then(r => r.json())
+        .then(res => res.json())
         .then(cfg => {
-          sipUA = new SIP.UA({
-            uri: cfg.uri,
-            transportOptions: { wsServers: cfg.wsServers },
-            authorizationUser: cfg.authorizationUser,
-            password: cfg.password,
-            sessionDescriptionHandlerFactoryOptions: {
-              peerConnectionOptions: { iceServers: cfg.iceServers }
+          userAgent = new SIP.UserAgent({
+            uri: `sip:${cfg.authorizationUser}@${cfg.domain}`,
+            transportOptions: {
+              server: cfg.wsServers
+            },
+            authorizationUsername: cfg.authorizationUser,
+            authorizationPassword: cfg.password,
+            sessionDescriptionHandlerOptions: {
+              constraints: { audio: true, video: false },
+              peerConnectionOptions: {
+                iceServers: cfg.iceServers || [{ urls: "stun:stun.l.google.com:19302" }]
+              }
             }
           });
-          sipUA.on('invite', session => {
-            session.accept();
-            currentCall = session;
-            document.getElementById('hangupBtn').disabled = false;
-            session.on('terminated', () => {
-              document.getElementById('hangupBtn').disabled = true;
-              document.getElementById('callBtn').disabled = false;
-              currentCall = null;
-            });
-          });
+    
+          userAgent.start();
+    
+          // При входящем звонке
+          userAgent.delegate = {
+            onInvite(invitation) {
+              currentSession = invitation;
+              invitation.accept();
+              document.getElementById('hangupBtn').disabled = false;
+    
+              invitation.stateChange.addListener(state => {
+                if (state === SIP.SessionState.Terminated) {
+                  currentSession = null;
+                  document.getElementById('hangupBtn').disabled = true;
+                  document.getElementById('callBtn').disabled = false;
+                }
+              });
+            }
+          };
+    
           document.getElementById('callBtn').disabled = false;
         })
-        .catch(console.error);
-
-      // Загрузка списка пользователей
+        .catch(err => {
+          console.error("SIP config error:", err);
+        });
+    
+      // === Загрузка списка пользователей ===
       fetch('/users')
-        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(res => res.ok ? res.json() : Promise.reject())
         .then(data => {
           const ul = document.getElementById('users');
-          data.users.forEach(u => {
+          data.users.forEach(user => {
             const li = document.createElement('li');
-            li.textContent = u.name + ' (' + u.phone + ')';
-            li.onclick = () => { selectedUserId = u.id; loadMessages(u.id); };
+            li.textContent = `${user.name} (${user.phone})`;
+            li.onclick = () => {
+              selectedUserId = user.id;
+              document.getElementById("chat-with").textContent = "Chat with " + user.name;
+              loadMessages(user.id);
+              document.querySelectorAll('#users li').forEach(el => el.classList.remove('selected'));
+              li.classList.add('selected');
+            };
             ul.appendChild(li);
           });
-        }).catch(() => window.location.href = '/login');
-
+        })
+        .catch(() => window.location.href = '/login');
+    
+      // === Загрузка сообщений ===
       function loadMessages(userId) {
         fetch(`/messages/${userId}`)
-          .then(r => r.json())
-          .then(msgs => {
-            const box = document.getElementById('chat-box'); box.innerHTML = '';
-            msgs.forEach(m => {
-              const d = document.createElement('div');
-              d.className = m.from_me ? 'message from-me' : 'message from-them';
-              d.innerHTML = `<p>${m.message}</p><span class="timestamp">${m.timestamp}</span>`;
-              box.appendChild(d);
+          .then(res => res.json())
+          .then(messages => {
+            const chatBox = document.getElementById('chat-box');
+            chatBox.innerHTML = '';
+            messages.forEach(msg => {
+              const div = document.createElement('div');
+              div.className = msg.from_me ? 'message from-me' : 'message from-them';
+              div.innerHTML = `<p>${msg.message}</p><span class="timestamp">${msg.timestamp}</span>`;
+              chatBox.appendChild(div);
             });
-            box.scrollTop = box.scrollHeight;
+            chatBox.scrollTop = chatBox.scrollHeight;
           });
       }
-
+    
+      // === Отправка сообщения ===
       function sendMessage() {
-        const inp = document.getElementById('messageInput');
-        if (!inp.value.trim() || !selectedUserId) return;
+        const input = document.getElementById('messageInput');
+        const text = input.value.trim();
+        if (!text || !selectedUserId) return;
+    
         fetch('/send', {
-          method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({to_user_id: selectedUserId, message: inp.value.trim()})
-        }).then(r => r.json()).then(() => { loadMessages(selectedUserId); inp.value = ''; });
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to_user_id: selectedUserId, message: text })
+        })
+        .then(res => res.json())
+        .then(() => {
+          loadMessages(selectedUserId);
+          input.value = '';
+        });
       }
-
-      socket.on('new_message', d => {
-        if (d.from_user_id===selectedUserId||d.to_user_id===selectedUserId) loadMessages(selectedUserId);
+    
+      // === Обработка новых сообщений через сокеты ===
+      socket.on('new_message', data => {
+        if (data.from_user_id === selectedUserId || data.to_user_id === selectedUserId) {
+          loadMessages(selectedUserId);
+        }
       });
-
+    
+      // === Отправка по Enter ===
+      document.getElementById('messageInput').addEventListener('keypress', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+    
+      // === Исходящий звонок ===
       document.getElementById('callBtn').onclick = () => {
-        const num = prompt('Enter number to call:'); if (!num) return;
-        currentCall = sipUA.invite(num, { sessionDescriptionHandlerOptions:{constraints:{audio:true,video:false}} });
-        document.getElementById('hangupBtn').disabled=false;
-        currentCall.on('terminated', () => { document.getElementById('hangupBtn').disabled=true; });
+        if (!userAgent) return alert("SIP клиент не готов");
+    
+        const number = prompt('Введите SIP-номер для звонка (например, sip:1001@your-sip-server.com):');
+        if (!number) return;
+    
+        const targetURI = SIP.UserAgent.makeURI(number);
+        if (!targetURI) return alert("Неверный SIP URI");
+    
+        currentSession = userAgent.invite(targetURI, {
+          sessionDescriptionHandlerOptions: {
+            constraints: { audio: true, video: false }
+          }
+        });
+    
+        document.getElementById('callBtn').disabled = true;
+        document.getElementById('hangupBtn').disabled = false;
+    
+        currentSession.stateChange.addListener(state => {
+          if (state === SIP.SessionState.Terminated) {
+            currentSession = null;
+            document.getElementById('callBtn').disabled = false;
+            document.getElementById('hangupBtn').disabled = true;
+          }
+        });
       };
-      document.getElementById('hangupBtn').onclick = () => { if(currentCall) currentCall.bye(); };
-
-      document.getElementById('messageInput').addEventListener('keypress', e=>{ if(e.key==='Enter'){e.preventDefault();sendMessage();}});
+    
+      // === Завершение звонка ===
+      document.getElementById('hangupBtn').onclick = () => {
+        if (currentSession) {
+          currentSession.bye();
+        }
+      };
     </script>
