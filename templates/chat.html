@@ -5,6 +5,7 @@
   <title>Messenger Aijamal</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <!-- SIP.js библиотека -->
+  <script src="https://unpkg.com/sip.js@0.21.2/dist/sip.min.js"></script>
 </head>
 <body>
   {% if session.get('user_id') %}
