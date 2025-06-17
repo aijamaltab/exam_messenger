@@ -1,49 +1,207 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-  <meta charset="utf-8">
-  <title>Sellinx Звонилка</title>
-  <script src="https://cdn.jsdelivr.net/npm/jssip@3.10.0/dist/jssip.min.js"></script>
+  <meta charset="UTF-8">
+  <title>Messenger Aijamal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <!-- SIP.js библиотека -->
+  <script src="https://cdn.jsdelivr.net/npm/sip.js@0.21.2/dist/sip.min.js"></script>
 </head>
 <body>
-  <h2>📞 Звонок через Antisip (sellinx)</h2>
-  <input id="target" placeholder="Введите номер, например: sip:username@sip.antisip.com" />
-  <br><br>
-  <button onclick="call()">Позвонить</button>
-  <button onclick="hangup()">Сбросить</button>
+  {% if session.get('user_id') %}
 
-  <script>
-    const socket = new JsSIP.WebSocketInterface('wss://sip.antisip.com:7443');
+    <div class="container">
+      <div class="sidebar">
+        <form action="{{ url_for('logout') }}" method="GET" style="margin: 0;">
+          <button type="submit" style="cursor: pointer;">Logout</button>
+        </form>
+        <h2>Users</h2>
+        <ul id="users" class="user-list">
+          {% for user in users %}
+            <li class="user-item" data-id="{{ user[0] }}" data-phone="{{ user[2] }}" style="cursor:pointer;">
+              <strong>{{ user[1] }}</strong><br>
+              <small>{{ user[2] }}</small>
+              <button class="call-user-btn" style="margin-left:10px;">📞</button>
+            </li>
+          {% endfor %}
+        </ul>
+        <script>
+          // При клике на имя пользователя открываем чат (как было)
+          document.querySelectorAll('.user-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+              // Если клик по кнопке "call-user-btn", игнорируем чат
+              if (e.target.classList.contains('call-user-btn')) return;
+              const userId = this.getAttribute('data-id');
+              document.getElementById('chat-with').textContent = `Chat with ${this.querySelector('strong').textContent}`;
+              fetch(`/messages/${userId}`)
+                .then(res => res.json())
+                .then(messages => {
+                  const chatBox = document.getElementById('chat-box');
+                  chatBox.innerHTML = '';
+                  messages.forEach(msg => {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'message';
+                    msgDiv.textContent = `${msg.sender}: ${msg.text}`;
+                    chatBox.appendChild(msgDiv);
+                  });
+                });
+            });
+          });
+        </script>
+      </div>
 
-    const configuration = {
-      sockets: [socket],
-      uri: 'sip:sellinx@sip.antisip.com',
-      password: 'Aijamal29062004',
-      display_name: 'Jama Tab',
-    };
+      <div class="chat">
+        <div class="chat-header">
+          <h3 id="chat-with">Select a user</h3>
+        </div>
 
-    const ua = new JsSIP.UA(configuration);
-    ua.start();
+        <div id="chat-box" class="chat-box"></div>
 
-    let session;
+        <div class="chat-controls">
+          <input type="text" id="messageInput" placeholder="Enter a message">
+          <button onclick="sendMessage()">➤</button>
+          <button id="callBtn">📞 Call</button>
+          <button id="hangupBtn" disabled>✖ Hangup</button>
+        </div>
+      </div>
+    </div>
 
-    function call() {
-      const target = document.getElementById('target').value;
-      session = ua.call(target, {
-        mediaConstraints: { audio: true, video: false }
-      });
-    }
+    <script>
+      const callBtn   = document.getElementById('callBtn');
+      const hangupBtn = document.getElementById('hangupBtn');
+      let userAgent, session, sipConfig;
 
-    function hangup() {
-      if (session) session.terminate();
-    }
+      // Шаг 1: получаем конфиг
+      fetch('/sip-config')
+        .then(res => {
+          if (!res.ok) throw new Error('SIP-config error');
+          return res.json();
+        })
+        .then(cfg => {
+          sipConfig = cfg;
 
-    ua.on('newRTCSession', function(e) {
-      if (e.originator === 'remote') {
-        session = e.session;
-        session.answer({ mediaConstraints: { audio: true, video: false } });
+          // Шаг 2: создаём UserAgent
+          userAgent = new SIP.UserAgent({
+            uri: `sip:${cfg.authorizationUser}@${cfg.domain}`,
+            transportOptions: {
+              server: cfg.wsServers               // массив или строка — SIP.js сам разберёт
+            },
+            authorizationUsername: cfg.authorizationUser,
+            authorizationPassword: cfg.password,
+            sessionDescriptionHandlerFactoryOptions: {
+              peerConnectionOptions: { iceServers: cfg.iceServers }
+            }
+          });
+
+          // события для входящих звонков
+          userAgent.delegate = {
+            onInvite(invitation) {
+              session = invitation;
+              invitation.accept();
+              hangupBtn.disabled = false;
+              callBtn.disabled   = true;
+
+              invitation.stateChange.addListener(state => {
+                if (state === SIP.SessionState.Terminated) {
+                  hangupBtn.disabled = true;
+                  callBtn.disabled   = false;
+                  session = null;
+                }
+              });
+            }
+          };
+
+          userAgent.start()
+            .then(() => callBtn.disabled = false)
+            .catch(err => console.error('UA start failed:', err));
+        })
+        .catch(err => console.error(err));
+
+      function makeCall(phoneNumber) {
+        if (!userAgent) return alert("SIP UserAgent не готов");
+        const target = SIP.UserAgent.makeURI(`sip:${phoneNumber}@${sipConfig.domain}`);
+        if (!target) return alert("Неверный номер для звонка");
+        session = userAgent.invite(target, {
+          sessionDescriptionHandlerOptions: {
+            constraints: { audio: true, video: false }
+          }
+        });
+        hangupBtn.disabled = false;
+        callBtn.disabled = true;
+
+        session.stateChange.addListener(state => {
+          if (state === SIP.SessionState.Terminated) {
+            hangupBtn.disabled = true;
+            callBtn.disabled = false;
+            session = null;
+          }
+        });
+        console.log("Calling", phoneNumber);
       }
-    });
-  </script>
+
+      // Кнопка "Call" - звонок по введённому номеру
+      callBtn.onclick = () => {
+        const number = prompt("Введите номер телефона (например, 79991234567):");
+        if (number) {
+          makeCall(number);
+        }
+      };
+
+      // Кнопка "Hangup"
+      hangupBtn.onclick = () => {
+        if (session) session.bye();
+      };
+
+      // Звонок по кнопке возле пользователя из списка
+      document.querySelectorAll('.call-user-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation(); // чтобы не сработал клик по li
+          const li = btn.closest('.user-item');
+          const phone = li.getAttribute('data-phone');
+          if (phone) {
+            makeCall(phone);
+          } else {
+            alert("Номер пользователя не найден");
+          }
+        });
+      });
+
+      // Функция отправки сообщений (твой существующий код)
+      function sendMessage() {
+        const input = document.getElementById('messageInput');
+        const text = input.value.trim();
+        if (!text) return;
+
+        // Допустим у тебя выбрана цель для отправки, можно реализовать как тебе нужно
+        // Тут просто пример, если у тебя есть selectedUserId
+        const toUserId = document.querySelector('.user-item.selected')?.getAttribute('data-id');
+        if (!toUserId) return alert("Выберите пользователя для сообщения");
+
+        fetch('/send', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ to_user_id: toUserId, message: text })
+        })
+        .then(res => res.json())
+        .then(res => {
+          if (res.status === 'sent') {
+            input.value = '';
+            // Добавь сообщение в чат, если нужно
+          } else {
+            alert('Ошибка отправки сообщения');
+          }
+        });
+      }
+
+      // Выделение пользователя в списке (пример)
+      document.querySelectorAll('.user-item').forEach(item => {
+        item.addEventListener('click', () => {
+          document.querySelectorAll('.user-item').forEach(i => i.classList.remove('selected'));
+          item.classList.add('selected');
+        });
+      });
+
+    </script>
+  {% endif %}
 </body>
 </html>
