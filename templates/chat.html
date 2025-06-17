@@ -5,7 +5,8 @@
   <title>Messenger Aijamal</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <!-- SIP.js библиотека -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/sip.js/0.7.5/sip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sip.js@0.21.2/dist/sip.min.js"></script>
+
 
 
 </head>
@@ -76,17 +77,15 @@
       callBtn.disabled = true;  // Заблокировать кнопку изначально
       
       fetch('/sip-config')
-        .then(res => {
-          if (!res.ok) throw new Error('SIP-config error');
-          return res.json();
-        })
+        .then(res => res.json())
         .then(cfg => {
           sipConfig = cfg;
+          console.log("Config from server:", cfg);
       
           userAgent = new SIP.UserAgent({
             uri: `sip:${cfg.authorizationUser}@${cfg.domain}`,
             transportOptions: {
-              server: cfg.wsServers
+              server: cfg.wsServers  // сюда пойдет массив с одним элементом, это нормально
             },
             authorizationUsername: cfg.authorizationUser,
             authorizationPassword: cfg.password,
@@ -97,64 +96,49 @@
       
           userAgent.delegate = {
             onInvite(invitation) {
-              session = invitation;
-              invitation.accept();
-              hangupBtn.disabled = false;
-              callBtn.disabled   = true;
-      
-              invitation.stateChange.addListener(state => {
-                if (state === SIP.SessionState.Terminated) {
-                  hangupBtn.disabled = true;
-                  callBtn.disabled   = false;
-                  session = null;
-                }
-              });
+              //...
             }
           };
       
-          return userAgent.start();
+          userAgent.start()
+            .then(() => callBtn.disabled = false)
+            .catch(err => console.error('UA start failed:', err));
         })
-        .then(() => {
-          callBtn.disabled = false;
-          console.log("UserAgent запущен и готов к звонкам");
-        })
-        .catch(err => {
-          console.error('Ошибка запуска UserAgent:', err);
-        });
-      
-      function makeCall(phoneNumber) {
-        if (!userAgent) {
-          alert("SIP UserAgent не готов");
-          return;
-        }
-        if (!sipConfig) {
-          alert("Конфигурация SIP не загружена");
-          return;
-        }
-        const target = SIP.UserAgent.makeURI(`sip:${phoneNumber}@${sipConfig.domain}`);
-        if (!target) {
-          alert("Неверный формат номера");
-          return;
-        }
-        session = userAgent.invite(target, {
-          sessionDescriptionHandlerOptions: {
-            constraints: { audio: true, video: false }
-          }
-        });
-      
-        hangupBtn.disabled = false;
-        callBtn.disabled = true;
-      
-        session.stateChange.addListener(state => {
-          if (state === SIP.SessionState.Terminated) {
-            hangupBtn.disabled = true;
-            callBtn.disabled = false;
-            session = null;
-          }
-        });
-      
-        console.log("Звонок на", phoneNumber);
-      }
+        .catch(console.error);
+            
+            function makeCall(phoneNumber) {
+              if (!userAgent) {
+                alert("SIP UserAgent не готов");
+                return;
+              }
+              if (!sipConfig) {
+                alert("Конфигурация SIP не загружена");
+                return;
+              }
+              const target = SIP.UserAgent.makeURI(`sip:${phoneNumber}@${sipConfig.domain}`);
+              if (!target) {
+                alert("Неверный формат номера");
+                return;
+              }
+              session = userAgent.invite(target, {
+                sessionDescriptionHandlerOptions: {
+                  constraints: { audio: true, video: false }
+                }
+              });
+            
+              hangupBtn.disabled = false;
+              callBtn.disabled = true;
+            
+              session.stateChange.addListener(state => {
+                if (state === SIP.SessionState.Terminated) {
+                  hangupBtn.disabled = true;
+                  callBtn.disabled = false;
+                  session = null;
+                }
+              });
+            
+              console.log("Звонок на", phoneNumber);
+            }
       
       callBtn.onclick = () => {
         const number = prompt("Введите номер телефона (например, 79991234567):");
