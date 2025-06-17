@@ -139,33 +139,27 @@ fetch('/sip-config')
   })
   .catch(err => console.error('SIP config error:', err));
 
-// Звонок
-callBtn.onclick = () => {
-  if (!selectedPhone || !userAgent) {
-    alert("Сначала выберите пользователя!");
-    return;
-  }
-  const target = SIP.UserAgent.makeURI(`sip:${selectedPhone}@sip.zadarma.com`);
+function makeCall(phoneNumber) {
+  if (!userAgent) return alert("SIP UserAgent не готов");
+  const target = SIP.UserAgent.makeURI(`sip:${phoneNumber}@${cfg.domain}`);
   session = userAgent.invite(target, {
     sessionDescriptionHandlerOptions: {
       constraints: { audio: true, video: false }
     }
   });
+  console.log("Calling", phoneNumber);
+}
 
-  callBtn.disabled = true;
-  hangupBtn.disabled = false;
-
-  session.stateChange.addListener(state => {
-    if (state === SIP.SessionState.Terminated) {
-      hangupBtn.disabled = true;
-      callBtn.disabled = false;
-      session = null;
-    }
-  });
+// Кнопка для звонка
+document.getElementById('callBtn').onclick = () => {
+  const number = prompt("Введите номер телефона (например, 79991234567):");
+  if (number) {
+    makeCall(number);
+  }
 };
 
-// Завершение звонка
-hangupBtn.onclick = () => {
+// Завершить звонок
+document.getElementById('hangupBtn').onclick = () => {
   if (session) session.bye();
 };
 </script>
