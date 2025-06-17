@@ -48,13 +48,13 @@ def sip_config():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
     return jsonify({
-        'wsServers':         [os.getenv('SIP_WS_URI')],
-        'uri':               f"sip:{os.getenv('SIP_USER')}@{os.getenv('SIPS_DOMAIN')}",
-        'authorizationUser': os.getenv('SIP_USER'),
-        'password':          os.getenv('SIP_PASS'),
-        'domain':            os.getenv('SIPS_DOMAIN'),
-        'iceServers':        [{'urls': ['stun:stun.l.google.com:19302']}]
-    })
+          "wsServers": ["wss://sip.antisip.com:8089/ws"],
+          "uri": "sip:sellinx@sip.antisip.com",
+          "authorizationUser": "sellinx",
+          "password": "Aijamal29062004",
+          "domain": "sip.antisip.com",
+          "iceServers": [{"urls":["stun:stun.l.google.com:19302"]}]
+        })
 
 @app.route('/')
 def home():
