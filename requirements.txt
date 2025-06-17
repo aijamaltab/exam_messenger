@@ -1,6 +1,7 @@
-flask
-gunicorn
-psycopg2-binary
+Flask
+flask-socketio
+eventlet
+mysql-connector-python
 python-dotenv
+asterisk-ami
 werkzeug
-dj-database-url

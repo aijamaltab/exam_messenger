@@ -1,23 +1,13 @@
-import psycopg2
 import os
-from urllib.parse import urlparse
+import mysql.connector
 from dotenv import load_dotenv
-
 load_dotenv()
 
 def get_connection():
-    db_url = os.getenv("DATABASE_URL")
-    if db_url is None:
-        raise ValueError("DATABASE_URL not set!")
-
-    
-    result = urlparse(db_url)
-
-    return psycopg2.connect(
-        host=result.hostname,
-        port=result.port,
-        database=result.path.lstrip("/"),
-        user=result.username,
-        password=result.password,
-        sslmode="require" 
+    return mysql.connector.connect(
+        host=os.getenv('DB_HOST'),
+        port=int(os.getenv('DB_PORT', 3306)),
+        user=os.getenv('DB_USER'),
+        password=os.getenv('DB_PASSWORD'),
+        database=os.getenv('DB_NAME')
     )

@@ -1,18 +1,17 @@
+#MYSQL
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100),
-    phone VARCHAR(20) UNIQUE,
-    password VARCHAR(255),
-    avatar VARCHAR(255)
-);
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE messages (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    sender_id INT,
-    receiver_id INT,
+    sender_id INT NOT NULL,
+    receiver_id INT NOT NULL,
     message TEXT,
-    file_path VARCHAR(255),
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sender_id) REFERENCES users(id),
-    FOREIGN KEY (receiver_id) REFERENCES users(id)
-);
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

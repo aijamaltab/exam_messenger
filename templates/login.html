@@ -2,23 +2,23 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Вход</title>
+  <title>Authorization</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
 </head>
 <body>
   <div class="form-container">
-    <h2>Вход</h2>
+    <h2>Authorization</h2>
     <form method="post">
-      <label for="phone">Номер телефона</label>
+      <label for="phone">Phone number</label>
       <input type="text" name="phone" required pattern="\+?\d{10,15}" placeholder="+996123456789">
 
-      <label for="password">Пароль</label>
+      <label for="password">Password</label>
       <input type="password" name="password" required>
 
-      <button type="submit">Войти</button>
+      <button type="submit">Enter</button>
     </form>
-    <p>Нет аккаунта? <a href="/register">Зарегистрироваться</a></p>
+    <p>No account? <a href="/register">sign up</a></p>
   </div>
 </body>
 </html>
