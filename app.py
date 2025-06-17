@@ -9,11 +9,13 @@ import mysql.connector
 from urllib.parse import urlparse
 from twilio.twiml.voice_response import VoiceResponse
 from twilio.rest import Client
+import eventlet
 
 # Load environment variables
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 
+eventlet.monkey_patch()
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "fallback-secret")
 UPLOAD_FOLDER = 'static/uploads'
