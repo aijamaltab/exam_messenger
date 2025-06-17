@@ -5,6 +5,8 @@
   <title>Messenger Aijamal</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+  <!-- Подключение SIP.js -->
+  <script src="https://cdn.jsdelivr.net/npm/sip.js@0.20.0/dist/sip.js"></script>
 </head>
 <body>
   {% if session['user_id'] %}
@@ -27,114 +29,93 @@
         <div class="chat-controls">
           <input type="text" id="messageInput" placeholder="Enter a message">
           <button onclick="sendMessage()">➤</button>
+          <button id="callBtn" disabled>📞 Call</button>
+          <button id="hangupBtn" disabled>✖ Hangup</button>
         </div>
       </div>
     </div>
-  {% else %}
-    <p>Please, <a href="{{ url_for('login') }}">log in</a> to the system.</p>
-  {% endif %}
 
+    <script>
+      const socket = io();
+      let selectedUserId = null;
+      let sipUA = null;
+      let currentCall = null;
 
-<script>
-  let currentUserId = {{ session['user_id'] }};
-  let selectedUserId = null;
+      // Инициализация SIP.js
+      fetch('/sip-config')
+        .then(r => r.json())
+        .then(cfg => {
+          sipUA = new SIP.UA({
+            uri: cfg.uri,
+            transportOptions: { wsServers: cfg.wsServers },
+            authorizationUser: cfg.authorizationUser,
+            password: cfg.password,
+            sessionDescriptionHandlerFactoryOptions: {
+              peerConnectionOptions: { iceServers: cfg.iceServers }
+            }
+          });
+          sipUA.on('invite', session => {
+            session.accept();
+            currentCall = session;
+            document.getElementById('hangupBtn').disabled = false;
+            session.on('terminated', () => {
+              document.getElementById('hangupBtn').disabled = true;
+              document.getElementById('callBtn').disabled = false;
+              currentCall = null;
+            });
+          });
+          document.getElementById('callBtn').disabled = false;
+        })
+        .catch(console.error);
 
-  const socket = io();  // Инициализация подключения Socket.IO
+      // Загрузка списка пользователей
+      fetch('/users')
+        .then(r => r.ok ? r.json() : Promise.reject())
+        .then(data => {
+          const ul = document.getElementById('users');
+          data.users.forEach(u => {
+            const li = document.createElement('li');
+            li.textContent = u.name + ' (' + u.phone + ')';
+            li.onclick = () => { selectedUserId = u.id; loadMessages(u.id); };
+            ul.appendChild(li);
+          });
+        }).catch(() => window.location.href = '/login');
 
-  // Загрузка списка пользователей
-  fetch('/users')
-    .then(response => {
-      if (!response.ok) throw new Error('Not authorized');
-      return response.json();
-    })
-    .then(data => {
-      const usersUl = document.getElementById("users");
-      usersUl.innerHTML = "";
-      data.users.forEach(user => {
-        const li = document.createElement("li");
-        li.innerHTML = `
-          <strong>${user.name}</strong><br><small>${user.phone}</small>
-        `;
-        li.onclick = () => {
-          selectedUserId = user.id;
-          document.getElementById("chat-with").textContent = "Chat with " + user.name;
-          loadMessages(user.id);
-          // Можно добавить подсветку выбранного пользователя
-          document.querySelectorAll('#users li').forEach(el => el.classList.remove('selected'));
-          li.classList.add('selected');
-        };
-        usersUl.appendChild(li);
-      });
-    })
-    .catch(error => {
-      console.error('Error loading users:', error);
-      alert("Пожалуйста, войдите снова.");
-      window.location.href = "/login";
-    });
-
-  // Загрузка сообщений
-  function loadMessages(userId) {
-  fetch(`/messages/${userId}`)
-    .then(res => res.json())
-    .then(data => {
-      const container = document.getElementById("chat-box");
-      container.innerHTML = '';
-      data.forEach(msg => {
-        const div = document.createElement("div");
-        div.className = msg.from_me ? 'message from-me' : 'message from-them';
-        div.innerHTML = `
-          <p>${msg.message}</p>
-          <span class="timestamp">${msg.timestamp}</span>
-        `;
-        container.appendChild(div);
-      });
-      // Прокрутка вниз
-      container.scrollTop = container.scrollHeight;
-    })
-    .catch(err => console.error("Ошибка при загрузке сообщений:", err));
-}
-
-
-  // Отправка сообщения
-  function sendMessage() {
-    const input = document.getElementById("messageInput");
-    const text = input.value.trim();
-    if (!text || !selectedUserId) return;
-
-    fetch('/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to_user_id: selectedUserId,
-        message: text
-      })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.message === 'OK') {
-        loadMessages(selectedUserId);
-        input.value = '';
-      } else {
-        console.error("Ошибка при отправке:", data.error || data.details);
+      function loadMessages(userId) {
+        fetch(`/messages/${userId}`)
+          .then(r => r.json())
+          .then(msgs => {
+            const box = document.getElementById('chat-box'); box.innerHTML = '';
+            msgs.forEach(m => {
+              const d = document.createElement('div');
+              d.className = m.from_me ? 'message from-me' : 'message from-them';
+              d.innerHTML = `<p>${m.message}</p><span class="timestamp">${m.timestamp}</span>`;
+              box.appendChild(d);
+            });
+            box.scrollTop = box.scrollHeight;
+          });
       }
-    })
-    .catch(err => console.error("Ошибка при fetch:", err));
-  }
 
-  // Обработка входящих сообщений через Socket.IO
-  socket.on('new_message', (data) => {
-    // Обновляем чат, если сообщение относится к текущему открытому диалогу
-    if (selectedUserId === data.from_user_id || selectedUserId === data.to_user_id) {
-      loadMessages(selectedUserId);
-    }
-  });
-  document.getElementById("messageInput").addEventListener('keypress', function(e) {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    sendMessage();
-  }
-});
-</script>
+      function sendMessage() {
+        const inp = document.getElementById('messageInput');
+        if (!inp.value.trim() || !selectedUserId) return;
+        fetch('/send', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({to_user_id: selectedUserId, message: inp.value.trim()})
+        }).then(r => r.json()).then(() => { loadMessages(selectedUserId); inp.value = ''; });
+      }
 
-</body>
-</html>
+      socket.on('new_message', d => {
+        if (d.from_user_id===selectedUserId||d.to_user_id===selectedUserId) loadMessages(selectedUserId);
+      });
+
+      document.getElementById('callBtn').onclick = () => {
+        const num = prompt('Enter number to call:'); if (!num) return;
+        currentCall = sipUA.invite(num, { sessionDescriptionHandlerOptions:{constraints:{audio:true,video:false}} });
+        document.getElementById('hangupBtn').disabled=false;
+        currentCall.on('terminated', () => { document.getElementById('hangupBtn').disabled=true; });
+      };
+      document.getElementById('hangupBtn').onclick = () => { if(currentCall) currentCall.bye(); };
+
+      document.getElementById('messageInput').addEventListener('keypress', e=>{ if(e.key==='Enter'){e.preventDefault();sendMessage();}});
+    </script>
