@@ -59,13 +59,16 @@ def on_disconnect():
 
 @socketio.on('call-user')
 def on_call_user(data):
-    # data: { to: <user_id>, offer: <RTCSessionDescriptionInit> }
-    target_sid = user_sockets.get(data['to'])
+    to_user = data['to']
+    target_sid = user_sockets.get(to_user)
     if target_sid:
         emit('call-made', {
             'from': session['user_id'],
             'offer': data['offer']
-        }, room=target_sid)
+        }, to=target_sid)
+    else:
+        print(f"!! No target_sid for user {to_user}")
+
 
 @socketio.on('make-answer')
 def on_make_answer(data):
@@ -90,7 +93,13 @@ def on_ice_candidate(data):
 @app.route('/')
 def home():
     return redirect('/chat') if 'user_id' in session else redirect('/login')
-    
+
+@socketio.on('register')
+def on_register(data):
+    user_id = data.get('user_id')
+    if user_id:
+        user_sockets[user_id] = request.sid
+        print(f">> Registered user {user_id} → sid {request.sid}")
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
