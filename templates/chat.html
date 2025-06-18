@@ -109,8 +109,9 @@
       <input id="roomInput" type="text" placeholder="Комната (например, 1001)" />
       <button onclick="joinCall()">🔗 Войти в комнату</button>
     </div>
-    <div class="section">
-      <button style="width:100%;" onclick="startCall()">📞 Позвонить</button>
+    <div class="section" style="display: flex; gap: 10px;">
+      <button style="flex:1;" onclick="startCall()">📞 Позвонить</button>
+      <button style="flex:1; background-color: #ef4444; border-color: #dc2626;" onclick="stopCall()">⏹️ Остановить звонок</button>
     </div>
     <div class="section">
       <h3 style="color: var(--primary); margin-bottom: 8px;">💬 Чат</h3>
