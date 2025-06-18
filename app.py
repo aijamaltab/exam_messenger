@@ -2,8 +2,7 @@ import os
 from flask import Flask, render_template, request, redirect, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from flask_socketio import SocketIO, emit, join_room
-from flask import session
+from flask_socketio import SocketIO, emit
 from datetime import datetime
 from dotenv import load_dotenv
 import mysql.connector
@@ -19,7 +18,6 @@ UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 socketio = SocketIO(app)
-last_message_id = 0
 
 # MySQL connection helper
 def get_connection():
@@ -27,19 +25,19 @@ def get_connection():
     if db_url:
         result = urlparse(db_url)
         config = {
-            'host':     result.hostname,
-            'port':     result.port,
-            'user':     result.username,
+            'host': result.hostname,
+            'port': result.port,
+            'user': result.username,
             'password': result.password,
             'database': result.path.lstrip('/')
         }
     else:
         config = {
-            'host':     os.getenv('DB_HOST',     'localhost'),
-            'port':     int(os.getenv('DB_PORT',  3306)),
-            'user':     os.getenv('DB_USER',     ''),
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': int(os.getenv('DB_PORT', 3306)),
+            'user': os.getenv('DB_USER', ''),
             'password': os.getenv('DB_PASSWORD', ''),
-            'database': os.getenv('DB_NAME',     '')
+            'database': os.getenv('DB_NAME', '')
         }
     print(f">> Connecting to MySQL: {config['user']}@{config['host']}:{config['port']}/{config['database']}")
     return mysql.connector.connect(**config)
@@ -48,63 +46,61 @@ user_sockets = {}
 
 @socketio.on('connect')
 def on_connect():
-    if 'user_id' in session:
-        user_sockets[session['user_id']] = request.sid
+    print(f"[connect] sid: {request.sid}")
+
+@socketio.on('register')
+def on_register(data):
+    user_id = str(data.get('user_id'))
+    if user_id:
+        user_sockets[user_id] = request.sid
+        print(f">> Registered user {user_id} → sid {request.sid}")
 
 @socketio.on('disconnect')
 def on_disconnect():
-    for uid, sid in list(user_sockets.items()):
-        if sid == request.sid:
+    sid = request.sid
+    for uid, stored_sid in list(user_sockets.items()):
+        if stored_sid == sid:
+            print(f"<< User {uid} disconnected")
             user_sockets.pop(uid)
+            break
 
 @socketio.on('call-user')
 def on_call_user(data):
-    to_user = data['to']
+    from_user = str(data.get('from'))
+    to_user = str(data.get('to'))
+    offer = data.get('offer')
     target_sid = user_sockets.get(to_user)
+    print(f">> call-user from {from_user} to {to_user}")
     if target_sid:
-        emit('call-made', {
-            'from': session['user_id'],
-            'offer': data['offer']
-        }, to=target_sid)
+        emit('call-made', {'from': from_user, 'offer': offer}, to=target_sid)
     else:
         print(f"!! No target_sid for user {to_user}")
 
-
 @socketio.on('make-answer')
 def handle_answer(data):
-    to_user = data.get('to')
+    from_user = str(data.get('from'))
+    to_user = str(data.get('to'))
+    answer = data.get('answer')
     target_sid = user_sockets.get(to_user)
     if target_sid:
-        emit('answer-made', {
-            'from': session['user_id'],
-            'answer': data['answer']
-        }, to=target_sid)
+        emit('answer-made', {'from': from_user, 'answer': answer}, to=target_sid)
     else:
         print(f"[make-answer] No sid for user {to_user}")
 
 @socketio.on('ice-candidate')
 def handle_ice(data):
-    to_user = data.get('to')
+    from_user = str(data.get('from'))
+    to_user = str(data.get('to'))
+    candidate = data.get('candidate')
     target_sid = user_sockets.get(to_user)
     if target_sid:
-        emit('ice-candidate', {
-            'from': session['user_id'],
-            'candidate': data['candidate']
-        }, to=target_sid)
+        emit('ice-candidate', {'from': from_user, 'candidate': candidate}, to=target_sid)
     else:
         print(f"[ice-candidate] No sid for user {to_user}")
-
 
 @app.route('/')
 def home():
     return redirect('/chat') if 'user_id' in session else redirect('/login')
-
-@socketio.on('register')
-def on_register(data):
-    user_id = data.get('user_id')
-    if user_id:
-        user_sockets[user_id] = request.sid
-        print(f">> Registered user {user_id} → sid {request.sid}")
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -135,10 +131,7 @@ def register():
         try:
             conn = get_connection()
             cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO users (name, phone, password) VALUES (%s, %s, %s)",
-                (name, phone, password)
-            )
+            cursor.execute("INSERT INTO users (name, phone, password) VALUES (%s, %s, %s)", (name, phone, password))
             conn.commit()
             conn.close()
         except Exception as e:
@@ -155,7 +148,7 @@ def chat():
     cursor.execute("SELECT id, name, phone FROM users WHERE id != %s", (session['user_id'],))
     users = cursor.fetchall()
     conn.close()
-    return render_template('chat.html', users=users, current_user=session['user_name'])
+    return render_template('chat.html', users=users, current_user=session['user_name'], current_user_id=session['user_id'])
 
 @app.route('/send', methods=['POST'])
 def send_message():
@@ -167,15 +160,10 @@ def send_message():
         return jsonify({'error': 'Invalid data'}), 400
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO messages (sender_id, receiver_id, message) VALUES (%s, %s, %s)",
-        (from_user, to_user, message)
-    )
+    cursor.execute("INSERT INTO messages (sender_id, receiver_id, message) VALUES (%s, %s, %s)", (from_user, to_user, message))
     conn.commit()
     msg_id = cursor.lastrowid
     conn.close()
-    global last_message_id
-    last_message_id = msg_id
     socketio.emit('new_message', {
         'message': message,
         'from_user_id': from_user,
@@ -190,12 +178,7 @@ def get_messages(user_id):
         return jsonify({'error': 'Unauthorized'}), 401
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT sender_id, message, timestamp FROM messages "
-        "WHERE (sender_id=%s AND receiver_id=%s) OR (sender_id=%s AND receiver_id=%s) "
-        "ORDER BY timestamp",
-        (session['user_id'], user_id, user_id, session['user_id'])
-    )
+    cursor.execute("SELECT sender_id, message, timestamp FROM messages WHERE (sender_id=%s AND receiver_id=%s) OR (sender_id=%s AND receiver_id=%s) ORDER BY timestamp", (session['user_id'], user_id, user_id, session['user_id']))
     rows = cursor.fetchall()
     conn.close()
     msgs = []
