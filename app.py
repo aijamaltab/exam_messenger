@@ -7,7 +7,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 import mysql.connector
 from urllib.parse import urlparse
-from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_socketio import join_room, leave_room
+
 
 # Load environment variables
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
