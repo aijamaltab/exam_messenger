@@ -71,24 +71,29 @@ def on_call_user(data):
 
 
 @socketio.on('make-answer')
-def on_make_answer(data):
-    # data: { to: <user_id>, answer: <RTCSessionDescriptionInit> }
-    target_sid = user_sockets.get(data['to'])
+def handle_answer(data):
+    to_user = data.get('to')
+    target_sid = user_sockets.get(to_user)
     if target_sid:
         emit('answer-made', {
             'from': session['user_id'],
             'answer': data['answer']
-        }, room=target_sid)
+        }, to=target_sid)
+    else:
+        print(f"[make-answer] No sid for user {to_user}")
 
 @socketio.on('ice-candidate')
-def on_ice_candidate(data):
-    # data: { to: <user_id>, candidate: <RTCIceCandidateInit> }
-    target_sid = user_sockets.get(data['to'])
+def handle_ice(data):
+    to_user = data.get('to')
+    target_sid = user_sockets.get(to_user)
     if target_sid:
         emit('ice-candidate', {
             'from': session['user_id'],
             'candidate': data['candidate']
-        }, room=target_sid)
+        }, to=target_sid)
+    else:
+        print(f"[ice-candidate] No sid for user {to_user}")
+
 
 @app.route('/')
 def home():
