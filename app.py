@@ -64,7 +64,7 @@ def on_disconnect():
 
 @socketio.on('register')
 def on_register(data):
-    print('→ register', data)
+    print('→ [server] register:', data, '   all users map:', connected_users)
     user_id = data.get('user_id')
     if user_id:
         connected_users[user_id] = request.sid
@@ -72,13 +72,15 @@ def on_register(data):
 
 @socketio.on('call-user')
 def on_call_user(data):
+    print('→ [server] call-user:', data, '   all users map:', connected_users)
     target = data.get('to')
-    offer = data.get('offer')
-    sid = connected_users.get(target)
+    offer  = data.get('offer')
+    sid    = connected_users.get(target)
     if sid:
+        print(f'    forwarding call-made to SID={sid}')
         emit('call-made', {'from': session['user_id'], 'offer': offer}, room=sid)
     else:
-        print(f'Target {target} not connected')
+        print(f'    Target {target} not connected!')
 
 @socketio.on('make-answer')
 def on_make_answer(data):
