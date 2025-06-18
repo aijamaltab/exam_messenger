@@ -47,7 +47,7 @@
     </div>
 
    <script>
-
+      const socket = io();  
       socket.on('connect', () => {
         console.log('Подключен к сокетам!');
       });
