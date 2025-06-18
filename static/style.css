@@ -1,278 +1,45 @@
-/* Общие стили */
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f4f6f8;
-  margin: 0;
-  padding: 0;
-  height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.container {
-  display: flex;
-  width: 90vw;
-  max-width: 1000px;
-  height: 80vh;
-  background: white;
-  border-radius: 15px;
-  box-shadow: 0 0 20px rgba(0,0,0,0.05);
-  overflow: hidden;
-}
-
-/* Сайдбар с пользователями */
-.sidebar {
-  width: 250px;
-  background-color: #fff;
-  border-right: 1px solid #eee;
-  display: flex;
-  flex-direction: column;
-  padding: 20px;
-}
-
-.sidebar h2 {
-  margin-top: 15px;
-  margin-bottom: 15px;
-  color: #333;
-  font-weight: 600;
-  font-size: 1.5rem;
-}
-/* Заголовки */
-h1, h2, h3 {
+  font-family: 'Segoe UI', sans-serif;
+  background: linear-gradient(to bottom, #f2f9ff, #d1e9ff);
   text-align: center;
+  padding: 30px;
   color: #333;
-  margin-bottom: 10px;
-}
-.chat-header h3 {
-  text-align: center;
-  color: #ffffff;
 }
 
-form {
-  display: flex;
-  flex-direction: column;
+h2 {
+  margin-bottom: 20px;
+  color: #005999;
 }
 
-input[type="text"],
-input[type="email"],
-input[type="password"],
-input[type="file"] {
-  padding: 12px;
-  margin-bottom: 15px;
+input {
+  padding: 10px;
+  font-size: 16px;
+  border-radius: 10px;
   border: 1px solid #ccc;
-  border-radius: 10px;
-  font-size: 16px;
-}
-#users {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  overflow-y: auto;
-  flex-grow: 1;
+  width: 250px;
 }
 
-#users li {
-  padding: 12px 15px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  color: #444;
-  font-size: 16px;
-}
-
-#users li:hover,
-#users li.active {
-  background-color: #4A90E2;
-  color: white;
-}
 button {
-  padding: 12px;
-  background-color: #4A90E2;
-  color: white;
-  font-weight: bold;
+  padding: 12px 20px;
+  font-size: 16px;
+  margin: 10px;
+  border-radius: 30px;
   border: none;
-  border-radius: 10px;
+  background-color: #00b894;
+  color: white;
   cursor: pointer;
-  transition: background 0.3s ease;
+  transition: background 0.3s;
 }
 
 button:hover {
-  background-color: #357ABD;
+  background-color: #019874;
 }
 
-a {
-  text-align: center;
-  color: #4A90E2;
-  text-decoration: none;
-  margin-top: 10px;
-}
-
-a:hover {
-  text-decoration: underline;
-}
-/* Основная область чата */
-.chat {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  background: #f9f9f9;
-}
-
-/* Верхний заголовок чата */
-.chat-header {
-  background-color: #4A90E2;
-  color: white;
-  padding: 15px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 1.25rem;
-  font-weight: 600;
-  user-select: none;
-}
-
-/* Кнопка выхода */
-.chat-header form button {
-  background-color: #FF6B6B;
-  border: none;
-  padding: 8px 14px;
-  border-radius: 8px;
-  color: white;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background-color 0.3s ease;
-}
-
-.chat-header form button:hover {
-  background-color: #E04848;
-}
-
-.chat-box {
-  padding: 10px;
-  height: 400px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.message {
-  position: relative;
-  padding: 10px 14px 20px 14px; /* место под время */
-  border-radius: 16px;
-  margin-bottom: 10px;
-  max-width: 60%;
-  word-wrap: break-word;
-  line-height: 1.4;
-  display: inline-block;
-}
-
-.message.from-me {
-  align-self: flex-end;
-  background-color: #dcf8c6;
-  color: black;
-  border-radius: 16px 16px 0 16px;
-}
-
-.message.from-them {
-  align-self: flex-start;
-  background-color: #ffffff;
-  color: black;
-  border-radius: 16px 16px 16px 0;
-  border: 1px solid #ddd;
-}
-
-.my-message {
-  text-align: right;
-  color: blue;
-  margin: 5px;
-}
-.their-message {
-  text-align: left;
-  color: green;
-  margin: 5px;
-}
-.user-item.selected {
-  background-color: #d0ebff;
-}
-
-
-.timestamp {
-  font-size: 10px;
-  color: #999;
-  position: absolute;
-  bottom: 4px;
-  right: 10px;
-}
-
-
-/* Панель ввода сообщения */
-.chat-controls {
-  display: flex;
-  padding: 15px 20px;
-  background-color: white;
-  border-top: 1px solid #ddd;
-  gap: 10px;
-}
-
-.chat-controls input[type="text"] {
-  flex-grow: 1;
-  padding: 12px 15px;
-  border: 1px solid #ccc;
+video {
+  width: 300px;
+  height: auto;
+  margin: 10px;
+  border: 5px solid #0090ff;
   border-radius: 20px;
-  font-size: 16px;
-  outline-offset: 2px;
-  transition: border-color 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
-
-.chat-controls input[type="text"]:focus {
-  border-color: #4A90E2;
-}
-
-.chat-controls button {
-  background-color: #4A90E2;
-  color: white;
-  border: none;
-  padding: 12px 20px;
-  border-radius: 20px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-}
-
-.chat-controls button:hover {
-  background-color: #357ABD;
-}
-
-.user-list {
-  list-style: none;
-  padding: 0;
-}
-
-.user-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px;
-  cursor: pointer;
-  border-bottom: 1px solid #ccc;
-}
-
-.user-item:hover {
-  background-color: #f0f0f0;
-}
-
-.avatar {
-  width: 40px;
-  height: 40px;
-  object-fit: cover;
-  border-radius: 50%;
-}
-
-.user-info {
-  display: flex;
-  flex-direction: column;
-  font-size: 14px;
-}
-
