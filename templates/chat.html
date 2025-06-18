@@ -117,6 +117,7 @@
 
         // События сигналинга
         socket.on('call-made', async data => {
+          console.log('Incoming call from', data.from);
           await handleIncomingCall(data.from, data.offer);
         });
         socket.on('answer-made', async data => {
