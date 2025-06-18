@@ -50,17 +50,22 @@
   });
 
   document.addEventListener('DOMContentLoaded', () => {
-    // Chat UI logic omitted for brevity...
-
-    document.querySelectorAll('.call-user-btn').forEach(btn => {
+    // 1) Привязываем клики по списку пользователей
+    document.querySelectorAll('.user-item').forEach(item => {
+      const btn = item.querySelector('.call-user-btn');
+      const uid = item.dataset.id;
+      // Запрет звонить себе
+      if (uid === '{{ session["user_id"] }}') {
+        btn.disabled = true;
+        return;
+      }
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        const targetId = btn.closest('.user-item').dataset.id;
-        if (targetId) startCall(targetId);
+        startCall(uid);
       });
     });
 
-    // SIGNAL EVENTS
+    // 2) Сигнальные события
     socket.on('call-made', async data => {
       console.log('← received call-made', data);
       try {
@@ -70,47 +75,50 @@
       }
     });
 
-    socket.on('make-answer', async data => {
+    socket.on('answer-made', data => {
+      console.log('← received answer-made', data);
       const pc = peerConnections.get(data.from);
       if (pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        pc.setRemoteDescription(new RTCSessionDescription(data.answer))
+          .then(() => console.log('   · setRemoteDescription(answer)'))
+          .catch(e => console.error(e));
       }
     });
 
-    socket.on('ice-candidate', async data => {
+    socket.on('ice-candidate', data => {
+      console.log('← received ice-candidate', data);
       const pc = peerConnections.get(data.from);
       if (pc) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (err) {
-          console.error('Failed to add ICE candidate:', err);
-        }
+        pc.addIceCandidate(new RTCIceCandidate(data.candidate))
+          .then(() => console.log('   · added ICE candidate'))
+          .catch(e => console.error(e));
       } else {
-        // buffer until PC is created
         pendingCandidates[data.from] = pendingCandidates[data.from] || [];
         pendingCandidates[data.from].push(data.candidate);
       }
     });
-  });
+  }); // ← не забудьте закрыть DOMContentLoaded
 
+  // 3) Функции вне DOMContentLoaded
   async function startCall(targetId) {
+    console.log('→ startCall to', targetId);
     const localStream = await getLocalStream();
     const pc = createPeerConnection(targetId, localStream);
     peerConnections.set(targetId, pc);
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-
     socket.emit('call-user', { to: targetId, offer });
+    console.log('→ emitted call-user');
   }
 
   async function handleIncomingCall(fromId, offer) {
+    console.log('→ handleIncomingCall from', fromId);
     const localStream = await getLocalStream();
     const pc = createPeerConnection(fromId, localStream);
     peerConnections.set(fromId, pc);
 
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    // flush buffered candidates
     (pendingCandidates[fromId] || []).forEach(async cand => {
       await pc.addIceCandidate(new RTCIceCandidate(cand));
     });
@@ -119,8 +127,10 @@
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     socket.emit('make-answer', { to: fromId, answer });
+    console.log('→ emitted make-answer');
   }
 
+  // Объединённый фабричный метод
   function createPeerConnection(peerId, stream) {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -151,7 +161,11 @@
   function attachLocalStream(stream) {
     let audio = document.getElementById('localAudio');
     if (!audio) {
-      audio = document.createElement('audio'); audio.id = 'localAudio'; audio.autoplay = true; audio.muted = true; document.body.appendChild(audio);
+      audio = document.createElement('audio');
+      audio.id = 'localAudio';
+      audio.autoplay = true;
+      audio.muted = true;
+      document.body.appendChild(audio);
     }
     audio.srcObject = stream;
   }
@@ -159,11 +173,15 @@
   function attachRemoteStream(stream) {
     let audio = document.getElementById('remoteAudio');
     if (!audio) {
-      audio = document.createElement('audio'); audio.id = 'remoteAudio'; audio.autoplay = true; document.body.appendChild(audio);
+      audio = document.createElement('audio');
+      audio.id = 'remoteAudio';
+      audio.autoplay = true;
+      document.body.appendChild(audio);
     }
     audio.srcObject = stream;
   }
 </script>
+
 
 <audio id="localAudio" autoplay muted></audio>
 <audio id="remoteAudio" autoplay></audio>
