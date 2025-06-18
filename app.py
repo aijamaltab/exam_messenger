@@ -47,6 +47,7 @@ def get_connection():
     return mysql.connector.connect(**config)
 
 connected_users = {}
+in_call_users = set()
 
 @app.route('/')
 def home():
@@ -64,15 +65,20 @@ def on_connect():
         print('[connect] No user_id in session')
         return False  # reject connection
 
-
 @socketio.on('disconnect')
 def on_disconnect():
-    for uid, sid in list(connected_users.items()):
+    user_to_remove = None
+    for uid, sid in connected_users.items():
         if sid == request.sid:
-            connected_users.pop(uid, None)
-            print(f'[disconnect] User {uid} disconnected (sid: {sid})')
+            user_to_remove = uid
             break
 
+    if user_to_remove:
+        connected_users.pop(user_to_remove, None)
+        in_call_users.discard(user_to_remove)
+        print(f'[disconnect] User {user_to_remove} disconnected (sid: {request.sid})')
+    else:
+        print(f'[disconnect] Unknown socket disconnected (sid: {request.sid})')
 
 @socketio.on('register')
 def on_register(data):
@@ -84,26 +90,34 @@ def on_register(data):
     except Exception as e:
         print(f'✖ Error in register: {e}')
 
-
 @socketio.on('call-user')
 def on_call_user(data):
     try:
+        from_user = str(session.get('user_id'))
         target = str(data.get('to'))
         offer = data.get('offer')
-        print('→ [server] call-user:', data, ' map:', connected_users)
+
+        print(f'[call-user] {from_user} → {target}')
+
+        if target in in_call_users:
+            print(f'    {target} is busy')
+            emit('user-busy', {'to': target}, room=request.sid)
+            return
 
         sid = connected_users.get(target)
         if not sid:
             print(f'    Target {target} not connected!')
+            emit('user-offline', {'to': target}, room=request.sid)
             return
 
-        from_sid = request.sid
-        from_user = next((uid for uid, s in connected_users.items() if s == from_sid), None)
-        if from_user:
-            emit('call-made', {
-                'from': from_user,
-                'offer': offer
-            }, room=sid)
+        in_call_users.add(from_user)
+        in_call_users.add(target)
+
+        emit('call-made', {
+            'from': from_user,
+            'offer': offer
+        }, room=sid)
+
     except Exception as e:
         print(f'✖ Error in call-user: {e}')
 
@@ -111,37 +125,76 @@ def on_call_user(data):
 @socketio.on('make-answer')
 def on_make_answer(data):
     try:
+        from_user = str(session.get('user_id'))
         target = str(data.get('to'))
         answer = data.get('answer')
 
-        sid = connected_users.get(target)
-        if not sid:
-            print(f'[make-answer] Target {target} not connected!')
-            return
+        print(f'[make-answer] {from_user} → {target}')
 
-        from_user = session.get('user_id')
-        if from_user:
-            emit('answer-made', {'from': str(from_user), 'answer': answer}, room=sid)
+        sid = connected_users.get(target)
+        if sid:
+            emit('answer-made', {
+                'from': from_user,
+                'answer': answer
+            }, room=sid)
+
     except Exception as e:
         print(f'✖ Error in make-answer: {e}')
+
+
+@socketio.on('reject-call')
+def on_reject_call(data):
+    try:
+        from_user = str(session.get('user_id'))
+        to = str(data.get('to'))
+
+        in_call_users.discard(from_user)
+        in_call_users.discard(to)
+
+        sid = connected_users.get(to)
+        if sid:
+            emit('call-rejected', {'from': from_user}, room=sid)
+
+        print(f'[reject-call] {from_user} rejected call from {to}')
+    except Exception as e:
+        print(f'✖ Error in reject-call: {e}')
+
+
+@socketio.on('end-call')
+def on_end_call(data):
+    try:
+        from_user = str(session.get('user_id'))
+        to = str(data.get('to'))
+
+        in_call_users.discard(from_user)
+        in_call_users.discard(to)
+
+        sid = connected_users.get(to)
+        if sid:
+            emit('call-ended', {'from': from_user}, room=sid)
+
+        print(f'[end-call] {from_user} ended call with {to}')
+    except Exception as e:
+        print(f'✖ Error in end-call: {e}')
 
 
 @socketio.on('ice-candidate')
 def on_ice_candidate(data):
     try:
+        from_user = str(session.get('user_id'))
         target = str(data.get('to'))
         candidate = data.get('candidate')
 
         sid = connected_users.get(target)
-        if not sid:
-            print(f'[ice-candidate] Target {target} not connected!')
-            return
+        if sid:
+            emit('ice-candidate', {
+                'from': from_user,
+                'candidate': candidate
+            }, room=sid)
 
-        from_user = session.get('user_id')
-        if from_user:
-            emit('ice-candidate', {'from': str(from_user), 'candidate': candidate}, room=sid)
     except Exception as e:
         print(f'✖ Error in ice-candidate: {e}')
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
