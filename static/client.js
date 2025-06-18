@@ -44,20 +44,16 @@ socket.on("signal", async (data) => {
     stopRingtone();
   } else if (data.type === "answer") {
     stopRingtone();
-    // Проверяем, можно ли установить remoteDescription с ответом
-    if (pc.signalingState === "have-local-offer" || pc.signalingState === "stable") {
+    if (pc.signalingState === "have-local-offer") {
       await pc.setRemoteDescription(new RTCSessionDescription(data));
     } else {
-      console.warn("Попытка установить remoteDescription с answer в неправильном состоянии:", pc.signalingState);
+      console.warn("Нельзя установить remoteDescription answer — состояние:", pc.signalingState);
     }
   } else if (data.candidate) {
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(data));
-    } catch (e) {
-      console.error("Ошибка добавления ICE-кандидата:", e);
-    }
+    await pc.addIceCandidate(new RTCIceCandidate(data));
   }
 });
+
 
 
 async function setupMedia() {
