@@ -41,8 +41,11 @@
     <!-- Подключаем Socket.IO и запускаем чат + WebRTC -->
     <script>
       const socket = io();
-      socket.on('connect', () => console.log('Socket.IO connected'));
-
+      socket.on('connect', () => {
+        console.log('socket connected, id =', socket.id);
+        // Эмитим "регистрацию" со своим user_id, чтобы сервер знал, кому отправлять сигналы
+        socket.emit('register', { user_id: {{ session["user_id"] }} });
+      });
       // ICE‑серверы для WebRTC
       const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 
