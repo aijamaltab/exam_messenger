@@ -2,7 +2,8 @@ import os
 from flask import Flask, render_template, request, redirect, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room
+from flask import session
 from datetime import datetime
 from dotenv import load_dotenv
 import mysql.connector
@@ -43,27 +44,53 @@ def get_connection():
     print(f">> Connecting to MySQL: {config['user']}@{config['host']}:{config['port']}/{config['database']}")
     return mysql.connector.connect(**config)
 
-@app.route('/sip-config', methods=['GET'])
-def sip_config():
-    if 'user_id' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-    return jsonify({
-        "wsServers": ["wss://sip.antisip.com:4443"],
-        "uri":               "sip:sellinx@sip.antisip.com",
-        "authorizationUser": "sellinx",
-        "password":          "Aijamal29062004",
-        "domain":            "sip.antisip.com",
-        "iceServers":        [{"urls":["stun:stun.l.google.com:19302"]}]
-    })
+user_sockets = {}
 
+@socketio.on('connect')
+def on_connect():
+    if 'user_id' in session:
+        user_sockets[session['user_id']] = request.sid
+
+@socketio.on('disconnect')
+def on_disconnect():
+    for uid, sid in list(user_sockets.items()):
+        if sid == request.sid:
+            user_sockets.pop(uid)
+
+@socketio.on('call-user')
+def on_call_user(data):
+    # data: { to: <user_id>, offer: <RTCSessionDescriptionInit> }
+    target_sid = user_sockets.get(data['to'])
+    if target_sid:
+        emit('call-made', {
+            'from': session['user_id'],
+            'offer': data['offer']
+        }, room=target_sid)
+
+@socketio.on('make-answer')
+def on_make_answer(data):
+    # data: { to: <user_id>, answer: <RTCSessionDescriptionInit> }
+    target_sid = user_sockets.get(data['to'])
+    if target_sid:
+        emit('answer-made', {
+            'from': session['user_id'],
+            'answer': data['answer']
+        }, room=target_sid)
+
+@socketio.on('ice-candidate')
+def on_ice_candidate(data):
+    # data: { to: <user_id>, candidate: <RTCIceCandidateInit> }
+    target_sid = user_sockets.get(data['to'])
+    if target_sid:
+        emit('ice-candidate', {
+            'from': session['user_id'],
+            'candidate': data['candidate']
+        }, room=target_sid)
 
 @app.route('/')
 def home():
     return redirect('/chat') if 'user_id' in session else redirect('/login')
     
-@socketio.on('connect')
-def handle_connect():
-    print("Клиент подключён")
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
