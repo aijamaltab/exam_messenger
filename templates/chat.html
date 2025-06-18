@@ -114,20 +114,22 @@
       callBtn.disabled = true;
     
       fetch('/sip-config')
-        .then(r => r.json())
+        .then(res => res.json())
         .then(cfg => {
-          sipConfig = cfg;
-          const wsServers = cfg.wsServers; // e.g. ["wss://sip.antisip.com:4443/ws"]
-    
           userAgent = new SIP.UserAgent({
-            uri: SIP.UserAgent.makeURI(`sip:${cfg.authorizationUser}@${cfg.domain}`),
-            transportOptions: { server: wsServers },
+            uri: SIP.UserAgent.makeURI(cfg.uri),
+            displayName: "Jama Tab",                // опционально, для исходящих звонков
+            transportOptions: { server: cfg.wsServers },
             authorizationUsername: cfg.authorizationUser,
             authorizationPassword: cfg.password,
             sessionDescriptionHandlerFactoryOptions: {
               peerConnectionOptions: { iceServers: cfg.iceServers }
             }
           });
+          return userAgent.start().then(() => userAgent.register());
+        })
+        .then(() => console.log("Registered as sellinx"))
+        .catch(console.error);
     
           userAgent.delegate = {
             async onInvite(inv) {
