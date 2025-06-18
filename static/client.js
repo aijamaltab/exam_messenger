@@ -44,11 +44,21 @@ socket.on("signal", async (data) => {
     stopRingtone();
   } else if (data.type === "answer") {
     stopRingtone();
-    await pc.setRemoteDescription(new RTCSessionDescription(data));
+    // Проверяем, можно ли установить remoteDescription с ответом
+    if (pc.signalingState === "have-local-offer" || pc.signalingState === "stable") {
+      await pc.setRemoteDescription(new RTCSessionDescription(data));
+    } else {
+      console.warn("Попытка установить remoteDescription с answer в неправильном состоянии:", pc.signalingState);
+    }
   } else if (data.candidate) {
-    await pc.addIceCandidate(new RTCIceCandidate(data));
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(data));
+    } catch (e) {
+      console.error("Ошибка добавления ICE-кандидата:", e);
+    }
   }
 });
+
 
 async function setupMedia() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
