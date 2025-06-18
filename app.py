@@ -17,7 +17,12 @@ app.secret_key = os.getenv('SECRET_KEY')
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-socketio = SocketIO(app, cors_allowed_origins="*", manage_session=True)
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    manage_session=True,
+    message_queue=os.getenv('REDIS_URL')    # например redis://:password@host:port/0
+)
 
 
 # MySQL connection helper
