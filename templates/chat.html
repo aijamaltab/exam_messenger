@@ -120,10 +120,10 @@
       fetch('/sip-config')
         .then(res => res.json())
         .then(cfg => {
-          sipConfig = cfg; 
+          sipConfig = cfg;
           userAgent = new SIP.UserAgent({
             uri: SIP.UserAgent.makeURI(cfg.uri),
-            displayName: "Jama Tab",                // опционально, для исходящих звонков
+            displayName: "Jama Tab",
             transportOptions: { server: cfg.wsServers },
             authorizationUsername: cfg.authorizationUser,
             authorizationPassword: cfg.password,
@@ -131,31 +131,27 @@
               peerConnectionOptions: { iceServers: cfg.iceServers }
             }
           });
-          return userAgent.start().then(() => userAgent.register());
-        })
-        .then(() => console.log("Registered as sellinx"))
-        .catch(console.error);
-    
+      
           userAgent.delegate = {
             async onInvite(inv) {
               inviter = inv;
-              await inviter.accept({ sessionDescriptionHandlerOptions:{constraints:{audio:true,video:false}} });
+              await inviter.accept({ sessionDescriptionHandlerOptions: { constraints: { audio: true, video: false } } });
               attachMedia(inviter);
               hangupBtn.disabled = false;
             }
           };
-    
-          return userAgent.start();
+      
+          return userAgent.start().then(() => userAgent.register());
         })
-        .then(() => userAgent.register())
         .then(() => {
-          console.log('SIP started & registered');
+          console.log("SIP started & registered");
           callBtn.disabled = false;
         })
         .catch(err => {
-          console.error('SIP init failed:', err);
-          alert('SIP error: ' + err.message);
+          console.error("SIP init failed:", err);
+          alert("SIP error: " + err.message);
         });
+
     
       function attachMedia(session) {
         const pc = session.sessionDescriptionHandler.peerConnection;
