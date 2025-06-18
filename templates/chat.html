@@ -39,11 +39,12 @@
 <script>
   const socket = io();
   const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
-
   const localUserId = "{{ session['user_id'] }}";
   const peerConnections = new Map();
   const pendingCandidates = {};
   let localStream = null;
+
+  const ringtone = document.getElementById('ringtone');
 
   socket.on('connect', () => {
     console.log('✔ Socket connected:', socket.id);
@@ -51,11 +52,9 @@
   });
 
   document.addEventListener('DOMContentLoaded', async () => {
-    // Получаем локальный микрофон один раз
     localStream = await getLocalStream();
-    attachLocalStream(localStream); // один раз после получения потока
+    attachLocalStream(localStream);
 
-    // Назначаем обработчики на кнопки вызова
     document.querySelectorAll('.user-item').forEach(item => {
       const btn = item.querySelector('.call-user-btn');
       const targetId = item.dataset.id;
@@ -64,46 +63,6 @@
         return;
       }
       btn.addEventListener('click', () => startCall(targetId));
-    });
-
-    // Событие входящего звонка
-    socket.on('call-made', async ({ from, offer }) => {
-      console.log('← Incoming call from', from);
-      const pc = createPeerConnection(from);
-      peerConnections.set(from, pc);
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('make-answer', { to: from, answer });
-
-      // Добавим отложенные ICE кандидаты
-      if (pendingCandidates[from]) {
-        for (const candidate of pendingCandidates[from]) {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        }
-        delete pendingCandidates[from];
-      }
-    });
-
-    // Событие ответа на звонок
-    socket.on('answer-made', async ({ from, answer }) => {
-      console.log('← Answer from', from);
-      const pc = peerConnections.get(from);
-      if (pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      }
-    });
-
-    // Событие ICE-кандидата
-    socket.on('ice-candidate', async ({ from, candidate }) => {
-      const pc = peerConnections.get(from);
-      if (pc) {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      } else {
-        pendingCandidates[from] = pendingCandidates[from] || [];
-        pendingCandidates[from].push(candidate);
-      }
     });
   });
 
@@ -120,7 +79,6 @@
   function createPeerConnection(peerId) {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-    // Добавляем локальные аудио-дорожки
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
     pc.onicecandidate = event => {
@@ -130,7 +88,7 @@
     };
 
     pc.ontrack = event => {
-      console.log('Получен удалённый трек:', event.streams[0]);
+      console.log('📡 Получен удалённый трек:', event.streams[0]);
       attachRemoteStream(event.streams[0]);
     };
 
@@ -139,44 +97,73 @@
 
   async function getLocalStream() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      return stream;
+      return await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
-      console.error('Ошибка доступа к микрофону:', err);
+      console.error('❌ Ошибка доступа к микрофону:', err);
       alert('Пожалуйста, разрешите доступ к микрофону.');
       throw err;
     }
   }
 
   function attachLocalStream(stream) {
-    let audio = document.getElementById('localAudio');
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.id = 'localAudio';
-      audio.autoplay = true;
-      audio.muted = true; // важно, чтобы не было эха
-      document.body.appendChild(audio);
-    }
+    const audio = document.getElementById('localAudio');
     audio.srcObject = stream;
   }
 
   function attachRemoteStream(stream) {
-    let audio = document.getElementById('remoteAudio');
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.id = 'remoteAudio';
-      audio.autoplay = true;
-      document.body.appendChild(audio);
-    }
+    const audio = document.getElementById('remoteAudio');
     audio.srcObject = stream;
-    // Чтобы гарантировать запуск звука (особенно в Chrome)
-    audio.play().catch(e => console.log('Ошибка воспроизведения звука:', e));
+    audio.play().catch(e => console.log('🔇 Ошибка воспроизведения звука:', e));
   }
+
+  socket.on('call-made', async ({ from, offer }) => {
+    console.log('← Incoming call from', from);
+    ringtone.play().catch(e => console.log('🔇 Рингтон не воспроизводится:', e));
+
+    const acceptCall = confirm(`Пользователь ${from} звонит. Принять вызов?`);
+    if (!acceptCall) return;
+
+    ringtone.pause();
+    ringtone.currentTime = 0;
+
+    const pc = createPeerConnection(from);
+    peerConnections.set(from, pc);
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit('make-answer', { to: from, answer });
+
+    if (pendingCandidates[from]) {
+      for (const candidate of pendingCandidates[from]) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+      delete pendingCandidates[from];
+    }
+  });
+
+  socket.on('answer-made', async ({ from, answer }) => {
+    console.log('← Answer from', from);
+    const pc = peerConnections.get(from);
+    if (pc) {
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    }
+  });
+
+  socket.on('ice-candidate', async ({ from, candidate }) => {
+    const pc = peerConnections.get(from);
+    if (pc) {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } else {
+      pendingCandidates[from] = pendingCandidates[from] || [];
+      pendingCandidates[from].push(candidate);
+    }
+  });
 </script>
 
-
-
-
+<audio id="ringtone" loop>
+  <source src="https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg" type="audio/ogg">
+</audio>
 <audio id="localAudio" autoplay muted></audio>
 <audio id="remoteAudio" autoplay></audio>
 {% endif %}
