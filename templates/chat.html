@@ -79,28 +79,41 @@
         fetch('/sip-config')
           .then(res => res.json())
           .then(cfg => {
+            console.log("SIP config:", cfg);
             sipConfig = cfg;
+        
+            // Убираем путь из wsServers[0]
+            const wsUrl = cfg.wsServers[0].replace(/\/.+$/, "");
+            console.log("Using WSS URL:", wsUrl);
+        
             userAgent = new SIP.UserAgent({
               uri: `sip:${cfg.authorizationUser}@${cfg.domain}`,
-              transportOptions: { server: cfg.wsServers },
+              transportOptions: { server: wsUrl },
               authorizationUsername: cfg.authorizationUser,
               authorizationPassword: cfg.password,
               sessionDescriptionHandlerFactoryOptions: {
                 peerConnectionOptions: { iceServers: cfg.iceServers }
               }
             });
-    
+        
             userAgent.delegate = {
               onInvite(invitation) {
-                // обработка входящего вызова
+                console.log("Incoming call:", invitation);
+                // здесь можно автоматически принять или показать UI
               }
             };
-    
-            userAgent.start()
-              .then(() => callBtn.disabled = false)
-              .catch(err => console.error('UA start failed:', err));
+        
+            return userAgent.start();
           })
-          .catch(console.error);
+          .then(() => {
+            console.log("UserAgent started ✔");
+            callBtn.disabled = false;      // включаем кнопку звонка
+          })
+          .catch(err => {
+            console.error("Failed to start UserAgent:", err);
+            alert("Не удалось инициализировать SIP: " + err.message);
+          });
+
     
         function makeCall(phoneNumber) {
           if (!userAgent) {
