@@ -1,165 +1,171 @@
-// Получаем уникальный ID сокета, чтобы не обрабатывать собственные сигналы
-let socket = io();
+// client.js
+
+// 1. Инициализация Socket.IO с транспортом WebSocket
+const socket = io({ transports: ['websocket'] });
 let myId = null;
-socket.on("connect", () => {
+socket.on('connect', () => {
   myId = socket.id;
 });
 
+// 2. Основные переменные
 let room = null;
 let username = null;
 let pc = null;
 
-const localVideo = document.getElementById("localVideo");
-const remoteVideo = document.getElementById("remoteVideo");
-const ringtone = document.getElementById("ringtone");
+const localVideo = document.getElementById('localVideo');
+const remoteVideo = document.getElementById('remoteVideo');
+const ringtone = document.getElementById('ringtone');
 
+// Настройки ICE: STUN + (при необходимости) TURN
 const config = {
   iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    // при необходимости можно добавить TURN:
-    // {
-    //   urls: "turn:turn.example.com:3478",
-    //   username: "user",
-    //   credential: "pass"
-    // }
-  ],
+    { urls: 'stun:stun.l.google.com:19302' },
+    // { urls: 'turn:turn.example.com:3478', username: 'user', credential: 'pass' }
+  ]
 };
 
+// 3. UI‑обработчики
+document.getElementById('btnJoin').onclick = joinCall;
+document.getElementById('btnCall').onclick = startCall;
+document.getElementById('btnStop').onclick = stopCall;
+document.getElementById('btnSend').onclick = sendMessage;
+
+// 4. Вход в комнату
 async function joinCall() {
-  room = document.getElementById("roomInput").value.trim();
-  username = document.getElementById("usernameInput").value.trim() || "Аноним";
-
-  if (!room) return alert("Введите комнату");
-  if (!username) return alert("Введите имя");
-
-  socket.emit("join", { room, username });
+  room = document.getElementById('roomInput').value.trim();
+  username = document.getElementById('usernameInput').value.trim() || 'Аноним';
+  if (!room) return alert('Введите комнату');
+  if (!username) return alert('Введите имя');
+  socket.emit('join', { room, username });
 }
 
-socket.on("joined", async () => {
+// 5. Обработка событий Socket.IO
+socket.on('joined', async () => {
   await setupMedia();
-  addChat("Система", `Вы вошли в комнату ${room} как ${username}`);
+  addChat('Система', `Вы вошли в комнату ${room} как ${username}`);
 });
 
-socket.on("signal", async ({ room: incomingRoom, from, data: payload }) => {
-  // Игнорируем сигналы из других комнат и свои же
-  if (incomingRoom !== room || from === myId) return;
+socket.on('signal', handleSignal);
 
-  // Если ещё нет PeerConnection — создаём новый
-  if (!pc) {
-    pc = await createPeerConnection();
-  }
-
-  if (payload.type === "offer") {
-    playRingtone();
-    await pc.setRemoteDescription(new RTCSessionDescription(payload));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    socket.emit("signal", { room, from: myId, data: pc.localDescription });
-    stopRingtone();
-
-  } else if (payload.type === "answer") {
-    stopRingtone();
-    await pc.setRemoteDescription(new RTCSessionDescription(payload));
-
-  } else if (payload.candidate) {
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(payload));
-    } catch (e) {
-      console.error("Ошибка при добавлении ICE-кандидата:", e);
-    }
-  }
+socket.on('chat', ({ username: from, message }) => {
+  addChat(from, message);
 });
 
+// 6. Настройка локальной аудио‑трека
 async function setupMedia() {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   localVideo.srcObject = stream;
 }
 
+// 7. Запуск звонка (офер)
 async function startCall() {
-  if (!room) return alert("Сначала войдите в комнату");
+  if (!room) return alert('Сначала войдите в комнату');
   if (!pc) pc = await createPeerConnection();
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  socket.emit("signal", { room, from: myId, data: offer });
+  socket.emit('signal', { room, from: myId, data: offer });
   playRingtone();
 }
 
+// 8. Обработка входящих сигналов (offer/answer/candidate)
+async function handleSignal({ room: r, from, data }) {
+  if (r !== room || from === myId) return; // только чужие сигналы из нашей комнаты
+  if (!pc) pc = await createPeerConnection();
+
+  if (data.type === 'offer') {
+    playRingtone();
+    await pc.setRemoteDescription(data);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit('signal', { room, from: myId, data: answer });
+    stopRingtone();
+
+  } else if (data.type === 'answer') {
+    stopRingtone();
+    await pc.setRemoteDescription(data);
+
+  } else if (data.candidate) {
+    await pc.addIceCandidate(data).catch(console.error);
+  }
+}
+
+// 9. Создание и настройка RTCPeerConnection
 async function createPeerConnection() {
-  // Закрываем старое соединение, если есть
   if (pc) {
     pc.close();
     pc = null;
   }
-
   pc = new RTCPeerConnection(config);
+  attachWebRTCLogs(pc);
 
-  // Логируем все ключевые состояния
-  pc.onicegatheringstatechange = () =>
-    console.log("ICE gathering state:", pc.iceGatheringState);
-  pc.oniceconnectionstatechange = () =>
-    console.log("ICE connection state:", pc.iceConnectionState);
-  pc.onsignalingstatechange = () =>
-    console.log("Signaling state:", pc.signalingState);
-  pc.onconnectionstatechange = () =>
-    console.log("PeerConnection state:", pc.connectionState);
-
-  // Отправка ICE-кандидатов
-  pc.onicecandidate = (e) => {
-    if (e.candidate) {
-      socket.emit("signal", { room, from: myId, data: e.candidate });
-      console.log("Sent ICE candidate:", e.candidate);
+  // ICE-кандидаты
+  pc.onicecandidate = ({ candidate }) => {
+    if (candidate) {
+      socket.emit('signal', { room, from: myId, data: candidate });
     }
   };
 
-  // Приём медиапотока
-  pc.ontrack = (e) => {
-    console.log("Received remote track");
-    remoteVideo.srcObject = e.streams[0];
+  // Приём удалённого потока
+  pc.ontrack = ({ streams }) => {
+    remoteVideo.srcObject = streams[0];
   };
 
-  // Добавляем локальные треки
+  // Добавляем локальный аудио‑трек
   const stream = localVideo.srcObject;
-  stream.getTracks().forEach((track) => {
-    pc.addTrack(track, stream);
-    console.log("Added local track:", track.kind);
-  });
+  stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
   return pc;
 }
 
-// ---- Чат ----
-
-function sendMessage() {
-  const input = document.getElementById("chatInput");
-  const message = input.value.trim();
-  if (message && room) {
-    socket.emit("chat", { room, username, message });
-    addChat("Вы", message);
-    input.value = "";
+// 10. Остановка звонка
+function stopCall() {
+  if (pc) {
+    pc.close();
+    pc = null;
   }
+  stopRingtone();
+  addChat('Система', 'Звонок остановлен');
 }
 
-function addChat(sender, message) {
-  const chatBox = document.getElementById("chatBox");
-  const msg = document.createElement("div");
-  msg.style.marginBottom = "5px";
-  msg.innerHTML = `<strong>${sender}:</strong> ${message}`;
-  chatBox.appendChild(msg);
+// 11. Чат
+function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg || !room) return;
+  socket.emit('chat', { room, username, message: msg });
+  addChat('Вы', msg);
+  input.value = '';
+}
+
+function addChat(user, text) {
+  const chatBox = document.getElementById('chatBox');
+  const div = document.createElement('div');
+  div.innerHTML = `<strong>${user}:</strong> ${text}`;
+  chatBox.appendChild(div);
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-socket.on("chat", (data) => {
-  addChat(data.username || "Собеседник", data.message);
-});
-
-// ---- Звонок ----
-
+// 12. Рингтон
 function playRingtone() {
-  ringtone.play().catch((e) => console.log("Ошибка воспроизведения звонка", e));
+  ringtone.play().catch(() => {});
 }
-
 function stopRingtone() {
   ringtone.pause();
   ringtone.currentTime = 0;
+}
+
+// 13. Логи WebRTC‑состояний
+function attachWebRTCLogs(pc) {
+  const events = [
+    'icegatheringstatechange',
+    'iceconnectionstatechange',
+    'signalingstatechange',
+    'connectionstatechange'
+  ];
+  events.forEach(evt => {
+    pc.addEventListener(evt, () => {
+      console.log(`WebRTC ${evt}:`, pc[evt.replace('statechange','State')]);
+    });
+  });
 }
