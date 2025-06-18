@@ -15,7 +15,7 @@
   </style>
 </head>
 <body>
-  <h2>📞 Ismailova Audio Call + Chat</h2>
+  <h2>Messenger</h2>
 
   <div>
     <input id="usernameInput" placeholder="Ваше имя (например, 1002)" />
@@ -24,7 +24,7 @@
   </div>
 
   <div style="margin-top: 20px;">
-    <button onclick="startCall()">📞 Позвонить</button>
+    <button onclick="startCall()">Позвонить</button>
   </div>
 
   <!-- Видео скрыты, но нужны для WebRTC -->
@@ -42,6 +42,7 @@
     <source src="https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg" type="audio/ogg">
   </audio>
 
+  <!-- Подключаем скрипты после всех элементов страницы -->
   <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
   <script src="/static/client.js"></script>
 </body>
