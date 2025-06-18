@@ -20,9 +20,9 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    manage_session=True,
-    message_queue=os.getenv('REDIS_URL')    # например redis://:password@host:port/0
+    manage_session=True
 )
+
 
 
 # MySQL connection helper
@@ -82,10 +82,13 @@ def on_call_user(data):
     print('→ [server] call-user:', data, ' map:', connected_users)
     sid = connected_users.get(target)
     if sid:
-        emit('call-made', {
-            'from': session['user_id'],
-            'offer': offer
-        }, room=sid)
+        from_sid = request.sid
+        from_user = next((uid for uid, s in connected_users.items() if s == from_sid), None)
+        if from_user:
+            emit('call-made', {
+                'from': from_user,
+                'offer': offer
+            }, room=sid)
     else:
         print(f'    Target {target} not connected!')
 
