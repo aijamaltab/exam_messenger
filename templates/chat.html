@@ -4,10 +4,7 @@
   <meta charset="UTF-8">
   <title>Messenger Aijamal</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <script src="{{ url_for('static', filename='sip-0.21.2.min.js') }}"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-
-
 </head>
 <body>
   {% if session.get('user_id') %}
@@ -27,37 +24,37 @@
             </li>
           {% endfor %}
         </ul>
-
       </div>
 
       <div class="chat">
         <div class="chat-header">
           <h3 id="chat-with">Select a user</h3>
         </div>
-
         <div id="chat-box" class="chat-box"></div>
-
         <div class="chat-controls">
           <input type="text" id="messageInput" placeholder="Enter a message">
           <button onclick="sendMessage()">➤</button>
-          <button id="callBtn">📞 Call</button>
-          <button id="hangupBtn" disabled>✖ Hangup</button>
         </div>
       </div>
     </div>
 
+    <!-- Подключаем Socket.IO и запускаем чат + WebRTC -->
     <script>
-      // === WebSocket Chat ===
       const socket = io();
       socket.on('connect', () => console.log('Socket.IO connected'));
-    
+
+      // ICE‑серверы для WebRTC
+      const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+      let currentChatUserId = null;
+      let localStream, peerConnection;
+
       document.addEventListener('DOMContentLoaded', () => {
-        let currentChatUserId = null;
         const chatWithEl   = document.getElementById('chat-with');
         const chatBox      = document.getElementById('chat-box');
         const messageInput = document.getElementById('messageInput');
-    
-        // Выбор пользователя
+
+        // Выбор пользователя для чата
         document.querySelectorAll('.user-item').forEach(item => {
           item.addEventListener('click', e => {
             if (e.target.classList.contains('call-user-btn')) return;
@@ -66,7 +63,7 @@
             loadMessages(currentChatUserId);
           });
         });
-    
+
         // Загрузка истории
         function loadMessages(userId) {
           fetch(`/messages/${userId}`)
@@ -82,7 +79,7 @@
               chatBox.scrollTop = chatBox.scrollHeight;
             });
         }
-    
+
         // Отправка нового сообщения
         window.sendMessage = () => {
           if (!currentChatUserId) return alert('Выберите пользователя слева');
@@ -98,121 +95,108 @@
             loadMessages(currentChatUserId);
           });
         };
-    
-        // Пришло новое через WebSocket
+
+        // Новое сообщение из WebSocket
         socket.on('new_message', data => {
           if (+data.from_user_id === +currentChatUserId) {
             loadMessages(currentChatUserId);
           }
         });
-    
-        // === SIP.js ===
-        const callBtn   = document.getElementById('callBtn');
-        const hangupBtn = document.getElementById('hangupBtn');
-        let userAgent, inviter, sipConfig;
-    
-        callBtn.disabled = true;
-    
-        
-    
-        fetch('/sip-config')
-          .then(res => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.json();
-          })
-          .then(cfg => {
-            console.log('SIP config from server:', cfg);
-            sipConfig = cfg;
-    
-            // Создаём и настраиваем UserAgent именно здесь
-            userAgent = new SIP.UserAgent({
-              uri: SIP.UserAgent.makeURI(cfg.uri),
-              transportOptions: { server: cfg.wsServers },
-              authorizationUsername: cfg.authorizationUser,
-              authorizationPassword: cfg.password,
-              sessionDescriptionHandlerFactoryOptions: {
-                peerConnectionOptions: { iceServers: cfg.iceServers }
-              }
-            });
-    
-            userAgent.delegate = {
-              async onInvite(inv) {
-                inviter = inv;
-                await inviter.accept({
-                  sessionDescriptionHandlerOptions: { constraints: { audio: true, video: false } }
-                });
-                attachMedia(inviter);
-                hangupBtn.disabled = false;
-              }
-            };
-    
-            // Стартуем UA
-            return userAgent.start();
-          })
-          .then(() => userAgent.register())
-          .then(() => {
-            console.log('SIP started & registered');
-            callBtn.disabled = false;
-          })
-          .catch(err => {
-            console.error('SIP init failed:', err);
-            alert('SIP error: ' + err.message);
-          });
-    
-        function attachMedia(session) {
-          const pc = session.sessionDescriptionHandler.peerConnection;
-          pc.addEventListener('track', e => {
-            if (e.track.kind === 'audio') {
-              document.getElementById('remoteAudio').srcObject = e.streams[0];
-            }
-          });
-          const localTracks = pc.getSenders()
-            .filter(s => s.track?.kind === 'audio')
-            .map(s => s.track);
-          if (localTracks.length) {
-            document.getElementById('localAudio').srcObject = new MediaStream(localTracks);
-          }
-        }
-    
-        function makeCall(phone) {
-          if (!userAgent || userAgent.state !== SIP.UserAgentState.Started) {
-            return alert('SIP UserAgent не готов');
-          }
-          const target = SIP.UserAgent.makeURI(`sip:${phone}@${sipConfig.domain}`);
-          if (!target) return alert('Неверный формат SIP URI');
-    
-          inviter = new SIP.Inviter(userAgent, target, {
-            sessionDescriptionHandlerOptions: { constraints: { audio: true, video: false } }
-          });
-          inviter.invite()
-            .then(() => {
-              console.log('Outgoing INVITE sent');
-              attachMedia(inviter);
-              hangupBtn.disabled = false;
-            })
-            .catch(e => alert('Ошибка звонка: ' + e.message));
-        }
-    
-        callBtn.addEventListener('click', () => {
-          const num = prompt('Введите номер (например, 79991234567):');
-          if (num) makeCall(num);
-        });
-        hangupBtn.addEventListener('click', () => inviter && inviter.bye());
-    
+
+        // Кнопки «📞» для звонков
         document.querySelectorAll('.call-user-btn').forEach(btn => {
           btn.addEventListener('click', e => {
             e.stopPropagation();
-            const phone = btn.closest('.user-item').dataset.phone;
-            if (phone) makeCall(phone);
+            const targetId = btn.closest('.user-item').dataset.id;
+            if (targetId) startCall(targetId);
           });
         });
+
+        // События сигналинга
+        socket.on('call-made', async data => {
+          await handleIncomingCall(data.from, data.offer);
+        });
+        socket.on('answer-made', async data => {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        });
+        socket.on('ice-candidate', data => {
+          peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        });
       });
+
+      // Инициация звонка
+      async function startCall(targetId) {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        attachLocalStream(localStream);
+
+        peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+        peerConnection.onicecandidate = e => {
+          if (e.candidate) {
+            socket.emit('ice-candidate', { to: targetId, candidate: e.candidate });
+          }
+        };
+        peerConnection.ontrack = e => {
+          attachRemoteStream(e.streams[0]);
+        };
+
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit('call-user', { to: targetId, offer });
+      }
+
+      // Обработка входящего звонка
+      async function handleIncomingCall(fromId, offer) {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        attachLocalStream(localStream);
+
+        peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+        peerConnection.onicecandidate = e => {
+          if (e.candidate) {
+            socket.emit('ice-candidate', { to: fromId, candidate: e.candidate });
+          }
+        };
+        peerConnection.ontrack = e => {
+          attachRemoteStream(e.streams[0]);
+        };
+
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit('make-answer', { to: fromId, answer });
+      }
+
+      // Вспомогательные: показываем аудиопотоки
+      function attachLocalStream(stream) {
+        let audioLocal = document.getElementById('localAudio');
+        if (!audioLocal) {
+          audioLocal = document.createElement('audio');
+          audioLocal.id = 'localAudio';
+          audioLocal.autoplay = true;
+          audioLocal.muted = true;
+          document.body.appendChild(audioLocal);
+        }
+        audioLocal.srcObject = stream;
+      }
+      function attachRemoteStream(stream) {
+        let audioRemote = document.getElementById('remoteAudio');
+        if (!audioRemote) {
+          audioRemote = document.createElement('audio');
+          audioRemote.id = 'remoteAudio';
+          audioRemote.autoplay = true;
+          document.body.appendChild(audioRemote);
+        }
+        audioRemote.srcObject = stream;
+      }
     </script>
 
-
   {% endif %}
-  
-  <audio id="remoteAudio" autoplay></audio>
+
+  <!-- Плейеры для аудио -->
   <audio id="localAudio" autoplay muted></audio>
+  <audio id="remoteAudio" autoplay></audio>
 </body>
 </html>
