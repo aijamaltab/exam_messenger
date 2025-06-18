@@ -18,7 +18,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY')
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 users = {}  # sid -> {"room": ..., "username": ...}
 
@@ -80,9 +80,6 @@ def on_disconnect():
     user = users.pop(request.sid, None)
     if user:
         print(f"{user['username']} disconnected from room {user['room']}")
-
-if __name__ == "__main__":
-    socketio.run(app, debug=True)
 
 
 @app.route('/login', methods=['GET', 'POST'])
