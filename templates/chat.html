@@ -62,8 +62,11 @@
 
     // SIGNAL EVENTS
     socket.on('call-made', async data => {
-      if (!peerConnections.has(data.from)) {
+      console.log('← received call-made', data);
+      try {
         await handleIncomingCall(data.from, data.offer);
+      } catch (err) {
+        console.error('✖ Error in handleIncomingCall:', err);
       }
     });
 
