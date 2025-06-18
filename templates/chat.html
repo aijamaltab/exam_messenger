@@ -5,7 +5,7 @@
   <title>Messenger Aijamal</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='sip-0.21.2.min.js') }}"></script>
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
 
 </head>
@@ -47,6 +47,10 @@
     </div>
 
    <script>
+     const socket = io(); // подключение
+      socket.on('connect', () => {
+        console.log('Подключен к сокетам!');
+      });
     document.addEventListener('DOMContentLoaded', () => {
       // === Чат ===
       let currentChatUserId = null;
