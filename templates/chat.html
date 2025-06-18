@@ -47,7 +47,7 @@
     </div>
 
    <script>
-     const socket = io(); // подключение
+
       socket.on('connect', () => {
         console.log('Подключен к сокетам!');
       });
@@ -120,6 +120,7 @@
       fetch('/sip-config')
         .then(res => res.json())
         .then(cfg => {
+          sipConfig = cfg; 
           userAgent = new SIP.UserAgent({
             uri: SIP.UserAgent.makeURI(cfg.uri),
             displayName: "Jama Tab",                // опционально, для исходящих звонков
@@ -211,7 +212,7 @@
           if (phone) makeCall(phone);
         });
       });
-    });
+    );
     </script>
 
   {% endif %}
