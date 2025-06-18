@@ -51,7 +51,7 @@ def sip_config():
         "wsServers": ["wss://sip.antisip.com:4443/ws"],
         "uri":               "sip:sellinx@sip.antisip.com",
         "authorizationUser": "sellinx",
-        "password":          os.getenv('ANTISIP_PASSWORD'),
+        "password":          "Aijamal29062004",
         "domain":            "sip.antisip.com",
         "iceServers":        [{"urls":["stun:stun.l.google.com:19302"]}]
     })
