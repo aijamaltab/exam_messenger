@@ -2,132 +2,183 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Calling</title>
-  <style>
-    :root {
-      --primary: #1e3a8a;
-      --secondary: #3b82f6;
-      --bg: #e0f2fe;
-      --text: #333;
-      --white: #fff;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background-color: var(--bg);
-      color: var(--text);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-    }
-    .container {
-      background: var(--white);
-      border: 2px solid var(--primary);
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      width: 100%;
-      max-width: 480px;
-      padding: 20px;
-    }
-    h2 {
-      text-align: center;
-      color: var(--primary);
-      margin-bottom: 16px;
-      font-size: 1.6rem;
-    }
-    .section {
-      margin-bottom: 20px;
-    }
-    .section input,
-    .section button {
-      font-size: 1rem;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid var(--secondary);
-    }
-    .section input {
-      width: calc(50% - 8px);
-      margin-right: 8px;
-    }
-    .section button {
-      background-color: var(--secondary);
-      color: var(--white);
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    .section button:hover {
-      background-color: var(--primary);
-    }
-    #chatBox {
-      background: var(--white);
-      border: 1px solid var(--secondary);
-      border-radius: 8px;
-      height: 240px;
-      overflow-y: auto;
-      padding: 12px;
-      margin-bottom: 8px;
-    }
-    .chat-input {
-      display: flex;
-    }
-    .chat-input input {
-      flex: 1;
-      border: 1px solid var(--secondary);
-      border-radius: 8px 0 0 8px;
-      padding: 10px;
-    }
-    .chat-input button {
-      border-radius: 0 8px 8px 0;
-      border: 1px solid var(--secondary);
-      background: var(--secondary);
-      color: var(--white);
-      margin-left: -1px;
-    }
-    .chat-message {
-      margin-bottom: 8px;
-    }
-    .chat-message strong {
-      color: var(--primary);
-    }
-    /* Скрываем видео элементы */
-    #localVideo,
-    #remoteVideo,
-    audio {
-      display: none;
-    }
-  </style>
+  <title>Messenger Aijamal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
-  <div class="container">
-    <h2>Messenger</h2>
-    <div class="section">
-      <input id="usernameInput" type="text" placeholder="Ваше имя (например, 1002)" />
-      <input id="roomInput" type="text" placeholder="Комната (например, 1001)" />
-      <button id="btnJoin">🔗 Войти в комнату</button>
-    </div>
-    <div class="section" style="display: flex; gap: 10px;">
-      <button id="btnCall" style="flex:1;">📞 Позвонить</button>
-      <button id="btnStop" style="flex:1; background-color: #ef4444; border-color: #dc2626;">⏹️ Остановить звонок</button>
-    </div>
-    <div class="section">
-      <h3 style="color: var(--primary); margin-bottom: 8px;">💬 Чат</h3>
-      <div id="chatBox"></div>
-      <div class="chat-input">
-        <input id="chatInput" type="text" placeholder="Написать сообщение..." />
-        <button id="btnSend">✉️ Отправить</button>
-      </div>
-    </div>
-    <!-- Скрытые видео и аудио для WebRTC -->
-    <video id="localVideo" autoplay muted playsinline></video>
-    <video id="remoteVideo" autoplay playsinline></video>
-    <audio id="ringtone" loop>
-      <source src="https://actions.google.com/sounds/v1/alarms/mechanical_clock_ring.ogg" type="audio/ogg">
-    </audio>
+{% if session.get('user_id') %}
+<div class="container">
+  <div class="sidebar">
+    <form action="{{ url_for('logout') }}" method="GET">
+      <button type="submit">Logout</button>
+    </form>
+    <h2>Users</h2>
+    <ul id="users" class="user-list">
+      {% for user in users %}
+      <li class="user-item" data-id="{{ user[0] }}">
+        <strong>{{ user[1] }}</strong><br>
+        <small>{{ user[2] }}</small>
+        <button class="call-user-btn">📞</button>
+      </li>
+      {% endfor %}
+    </ul>
   </div>
-  <!-- Скрипты -->
-  <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
-  <script src="/static/client.js"></script>
+  <div class="chat">
+    <div class="chat-header">
+      <h3 id="chat-with">Select a user</h3>
+    </div>
+    <div id="chat-box" class="chat-box"></div>
+    <div class="chat-controls">
+      <input type="text" id="messageInput" placeholder="Enter a message">
+      <button onclick="sendMessage()">➤</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const socket = io();
+  const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+  const localUserId = "{{ session['user_id'] }}";
+  const peerConnections = new Map();
+  const pendingCandidates = {};
+  let localStream = null;
+
+  socket.on('connect', () => {
+    console.log('✔ Socket connected:', socket.id);
+    socket.emit('register', { user_id: localUserId });
+  });
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    // Получаем локальный микрофон один раз
+    localStream = await getLocalStream();
+    attachLocalStream(localStream); // один раз после получения потока
+
+    // Назначаем обработчики на кнопки вызова
+    document.querySelectorAll('.user-item').forEach(item => {
+      const btn = item.querySelector('.call-user-btn');
+      const targetId = item.dataset.id;
+      if (targetId === localUserId) {
+        btn.disabled = true;
+        return;
+      }
+      btn.addEventListener('click', () => startCall(targetId));
+    });
+
+    // Событие входящего звонка
+    socket.on('call-made', async ({ from, offer }) => {
+      console.log('← Incoming call from', from);
+      const pc = createPeerConnection(from);
+      peerConnections.set(from, pc);
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('make-answer', { to: from, answer });
+
+      // Добавим отложенные ICE кандидаты
+      if (pendingCandidates[from]) {
+        for (const candidate of pendingCandidates[from]) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+        delete pendingCandidates[from];
+      }
+    });
+
+    // Событие ответа на звонок
+    socket.on('answer-made', async ({ from, answer }) => {
+      console.log('← Answer from', from);
+      const pc = peerConnections.get(from);
+      if (pc) {
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      }
+    });
+
+    // Событие ICE-кандидата
+    socket.on('ice-candidate', async ({ from, candidate }) => {
+      const pc = peerConnections.get(from);
+      if (pc) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        pendingCandidates[from] = pendingCandidates[from] || [];
+        pendingCandidates[from].push(candidate);
+      }
+    });
+  });
+
+  async function startCall(to) {
+    console.log('→ Calling', to);
+    const pc = createPeerConnection(to);
+    peerConnections.set(to, pc);
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('call-user', { to, offer });
+  }
+
+  function createPeerConnection(peerId) {
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+    // Добавляем локальные аудио-дорожки
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    pc.onicecandidate = event => {
+      if (event.candidate) {
+        socket.emit('ice-candidate', { to: peerId, candidate: event.candidate });
+      }
+    };
+
+    pc.ontrack = event => {
+      console.log('Получен удалённый трек:', event.streams[0]);
+      attachRemoteStream(event.streams[0]);
+    };
+
+    return pc;
+  }
+
+  async function getLocalStream() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      return stream;
+    } catch (err) {
+      console.error('Ошибка доступа к микрофону:', err);
+      alert('Пожалуйста, разрешите доступ к микрофону.');
+      throw err;
+    }
+  }
+
+  function attachLocalStream(stream) {
+    let audio = document.getElementById('localAudio');
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.id = 'localAudio';
+      audio.autoplay = true;
+      audio.muted = true; // важно, чтобы не было эха
+      document.body.appendChild(audio);
+    }
+    audio.srcObject = stream;
+  }
+
+  function attachRemoteStream(stream) {
+    let audio = document.getElementById('remoteAudio');
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.id = 'remoteAudio';
+      audio.autoplay = true;
+      document.body.appendChild(audio);
+    }
+    audio.srcObject = stream;
+    // Чтобы гарантировать запуск звука (особенно в Chrome)
+    audio.play().catch(e => console.log('Ошибка воспроизведения звука:', e));
+  }
+</script>
+
+
+
+
+<audio id="localAudio" autoplay muted></audio>
+<audio id="remoteAudio" autoplay></audio>
+{% endif %}
 </body>
 </html>
