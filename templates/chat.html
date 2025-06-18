@@ -82,8 +82,7 @@
             console.log("SIP config:", cfg);
             sipConfig = cfg;
         
-            // Убираем путь из wsServers[0]
-            const wsUrl = cfg.wsServers[0].replace(/\/.+$/, "");
+            const wsUrl = new URL(cfg.wsServers[0]).origin;  // ✅ исправлено здесь
             console.log("Using WSS URL:", wsUrl);
         
             userAgent = new SIP.UserAgent({
@@ -99,7 +98,7 @@
             userAgent.delegate = {
               onInvite(invitation) {
                 console.log("Incoming call:", invitation);
-                // здесь можно автоматически принять или показать UI
+                // обработка входящего вызова
               }
             };
         
@@ -107,12 +106,13 @@
           })
           .then(() => {
             console.log("UserAgent started ✔");
-            callBtn.disabled = false;      // включаем кнопку звонка
+            callBtn.disabled = false;
           })
           .catch(err => {
             console.error("Failed to start UserAgent:", err);
             alert("Не удалось инициализировать SIP: " + err.message);
           });
+
 
     
         function makeCall(phoneNumber) {
