@@ -42,62 +42,57 @@ def get_connection():
     print(f">> Connecting to MySQL: {config['user']}@{config['host']}:{config['port']}/{config['database']}")
     return mysql.connector.connect(**config)
 
-user_sockets = {}
+connected_users = {}
 
 @socketio.on('connect')
 def on_connect():
-    print(f"[connect] sid: {request.sid}")
-
-@socketio.on('register')
-def on_register(data):
-    user_id = str(data.get('user_id'))
+    # здесь session['user_id'] уже должен быть установлен вашим login-миддлварем
+    user_id = session.get('user_id')
     if user_id:
-        user_sockets[user_id] = request.sid
-        print(f">> Registered user {user_id} → sid {request.sid}")
+        connected_users[user_id] = request.sid
+        print(f'User {user_id} connected as {request.sid}')
 
 @socketio.on('disconnect')
 def on_disconnect():
-    sid = request.sid
-    for uid, stored_sid in list(user_sockets.items()):
-        if stored_sid == sid:
-            print(f"<< User {uid} disconnected")
-            user_sockets.pop(uid)
+    # вычистим запись
+    for u, sid in list(connected_users.items()):
+        if sid == request.sid:
+            connected_users.pop(u)
+            print(f'User {u} disconnected')
             break
+
+@socketio.on('register')
+def on_register(data):
+    # альтернативный путь регистрации
+    user_id = data.get('user_id')
+    if user_id:
+        connected_users[user_id] = request.sid
 
 @socketio.on('call-user')
 def on_call_user(data):
-    from_user = str(data.get('from'))
-    to_user = str(data.get('to'))
+    target = data.get('to')
     offer = data.get('offer')
-    target_sid = user_sockets.get(to_user)
-    print(f">> call-user from {from_user} to {to_user}")
-    if target_sid:
-        emit('call-made', {'from': from_user, 'offer': offer}, to=target_sid)
+    sid = connected_users.get(target)
+    if sid:
+        emit('call-made', {'from': session['user_id'], 'offer': offer}, room=sid)
     else:
-        print(f"!! No target_sid for user {to_user}")
+        print(f'Target {target} not connected')
 
 @socketio.on('make-answer')
-def handle_answer(data):
-    from_user = str(data.get('from'))
-    to_user = str(data.get('to'))
+def on_make_answer(data):
+    target = data.get('to')
     answer = data.get('answer')
-    target_sid = user_sockets.get(to_user)
-    if target_sid:
-        emit('answer-made', {'from': from_user, 'answer': answer}, to=target_sid)
-    else:
-        print(f"[make-answer] No sid for user {to_user}")
+    sid = connected_users.get(target)
+    if sid:
+        emit('answer-made', {'from': session['user_id'], 'answer': answer}, room=sid)
 
 @socketio.on('ice-candidate')
-def handle_ice(data):
-    from_user = str(data.get('from'))
-    to_user = str(data.get('to'))
+def on_ice_candidate(data):
+    target = data.get('to')
     candidate = data.get('candidate')
-    target_sid = user_sockets.get(to_user)
-    if target_sid:
-        emit('ice-candidate', {'from': from_user, 'candidate': candidate}, to=target_sid)
-    else:
-        print(f"[ice-candidate] No sid for user {to_user}")
-
+    sid = connected_users.get(target)
+    if sid:
+        emit('ice-candidate', {'from': session['user_id'], 'candidate': candidate}, room=sid)
 @app.route('/')
 def home():
     return redirect('/chat') if 'user_id' in session else redirect('/login')
