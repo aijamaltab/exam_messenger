@@ -7,6 +7,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import mysql.connector
 from urllib.parse import urlparse
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Load environment variables
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -17,11 +18,8 @@ app.secret_key = os.getenv('SECRET_KEY')
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-socketio = SocketIO(
-    app,
-    cors_allowed_origins="*",
-    manage_session=True
-)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+socketio = SocketIO(app, manage_session=False)
 
 
 
@@ -50,28 +48,37 @@ def get_connection():
 
 connected_users = {}
 
+@app.route('/')
+def home():
+    return redirect('/chat') if 'user_id' in session else redirect('/login')
+
+
 @socketio.on('connect')
 def on_connect():
-    # здесь session['user_id'] уже должен быть установлен вашим login-миддлварем
     user_id = session.get('user_id')
     if user_id:
+        user_id = str(user_id)
         connected_users[user_id] = request.sid
-        print(f'User {user_id} connected as {request.sid}')
+        print(f'[connect] User {user_id} connected as {request.sid}')
+    else:
+        print('[connect] No user_id in session')
+        return False  # reject connection
+
 
 @socketio.on('disconnect')
 def on_disconnect():
-    # вычистим запись
-    for u, sid in list(connected_users.items()):
+    for uid, sid in list(connected_users.items()):
         if sid == request.sid:
-            connected_users.pop(u)
-            print(f'User {u} disconnected')
+            connected_users.pop(uid, None)
+            print(f'[disconnect] User {uid} disconnected (sid: {sid})')
             break
+
 
 @socketio.on('register')
 def on_register(data):
     print('→ [server] register:', data, '   all users map:', connected_users)
     try:
-        user_id = int(data.get('user_id'))
+        user_id = str(data['user_id'])
         connected_users[user_id] = request.sid
         print(f'    mapped user {user_id} -> {request.sid}')
     except Exception as e:
@@ -80,11 +87,16 @@ def on_register(data):
 
 @socketio.on('call-user')
 def on_call_user(data):
-    target = int(data.get('to'))        # ← приводим к int
-    offer  = data.get('offer')
-    print('→ [server] call-user:', data, ' map:', connected_users)
-    sid = connected_users.get(target)
-    if sid:
+    try:
+        target = str(data.get('to'))
+        offer = data.get('offer')
+        print('→ [server] call-user:', data, ' map:', connected_users)
+
+        sid = connected_users.get(target)
+        if not sid:
+            print(f'    Target {target} not connected!')
+            return
+
         from_sid = request.sid
         from_user = next((uid for uid, s in connected_users.items() if s == from_sid), None)
         if from_user:
@@ -92,27 +104,44 @@ def on_call_user(data):
                 'from': from_user,
                 'offer': offer
             }, room=sid)
-    else:
-        print(f'    Target {target} not connected!')
+    except Exception as e:
+        print(f'✖ Error in call-user: {e}')
+
 
 @socketio.on('make-answer')
 def on_make_answer(data):
-    target = int(data.get('to'))
-    answer = data.get('answer')
-    sid = connected_users.get(target)
-    if sid:
-        emit('answer-made', {'from': session['user_id'], 'answer': answer}, room=sid)
+    try:
+        target = str(data.get('to'))
+        answer = data.get('answer')
+
+        sid = connected_users.get(target)
+        if not sid:
+            print(f'[make-answer] Target {target} not connected!')
+            return
+
+        from_user = session.get('user_id')
+        if from_user:
+            emit('answer-made', {'from': str(from_user), 'answer': answer}, room=sid)
+    except Exception as e:
+        print(f'✖ Error in make-answer: {e}')
+
 
 @socketio.on('ice-candidate')
 def on_ice_candidate(data):
-    target = int(data.get('to'))
-    candidate = data.get('candidate')
-    sid = connected_users.get(target)
-    if sid:
-        emit('ice-candidate', {'from': session['user_id'], 'candidate': candidate}, room=sid)
-@app.route('/')
-def home():
-    return redirect('/chat') if 'user_id' in session else redirect('/login')
+    try:
+        target = str(data.get('to'))
+        candidate = data.get('candidate')
+
+        sid = connected_users.get(target)
+        if not sid:
+            print(f'[ice-candidate] Target {target} not connected!')
+            return
+
+        from_user = session.get('user_id')
+        if from_user:
+            emit('ice-candidate', {'from': str(from_user), 'candidate': candidate}, room=sid)
+    except Exception as e:
+        print(f'✖ Error in ice-candidate: {e}')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
