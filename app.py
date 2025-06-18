@@ -17,9 +17,9 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY')
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-socketio = SocketIO(app, manage_session=False)
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+users = {}  # sid -> {"room": ..., "username": ...}
 
 
 
@@ -46,154 +46,42 @@ def get_connection():
     print(f">> Connecting to MySQL: {config['user']}@{config['host']}:{config['port']}/{config['database']}")
     return mysql.connector.connect(**config)
 
-connected_users = {}
-in_call_users = set()
-
 @app.route('/')
 def home():
     return redirect('/chat') if 'user_id' in session else redirect('/login')
 
 
-@socketio.on('connect')
-def on_connect():
-    user_id = session.get('user_id')
-    if user_id:
-        user_id = str(user_id)
-        connected_users[user_id] = request.sid
-        print(f'[connect] User {user_id} connected as {request.sid}')
-    else:
-        print('[connect] No user_id in session')
-        return False  # reject connection
+@socketio.on("join")
+def on_join(data):
+    room = data.get("room")
+    username = data.get("username", "Аноним")
+    users[request.sid] = {"room": room, "username": username}
+    join_room(room)
+    emit("joined", {"room": room}, room=request.sid)
+    print(f"{username} joined room {room}")
 
-@socketio.on('disconnect')
+@socketio.on("signal")
+def on_signal(data):
+    room = users.get(request.sid, {}).get("room")
+    if room:
+        emit("signal", data["data"], room=room, include_self=False)
+
+@socketio.on("chat")
+def on_chat(data):
+    room = users.get(request.sid, {}).get("room")
+    username = users.get(request.sid, {}).get("username", "Аноним")
+    message = data.get("message", "")
+    if room and message:
+        emit("chat", {"username": username, "message": message}, room=room, include_self=False)
+
+@socketio.on("disconnect")
 def on_disconnect():
-    user_to_remove = None
-    for uid, sid in connected_users.items():
-        if sid == request.sid:
-            user_to_remove = uid
-            break
+    user = users.pop(request.sid, None)
+    if user:
+        print(f"{user['username']} disconnected from room {user['room']}")
 
-    if user_to_remove:
-        connected_users.pop(user_to_remove, None)
-        in_call_users.discard(user_to_remove)
-        print(f'[disconnect] User {user_to_remove} disconnected (sid: {request.sid})')
-    else:
-        print(f'[disconnect] Unknown socket disconnected (sid: {request.sid})')
-
-@socketio.on('register')
-def on_register(data):
-    print('→ [server] register:', data, '   all users map:', connected_users)
-    try:
-        user_id = str(data['user_id'])
-        connected_users[user_id] = request.sid
-        print(f'    mapped user {user_id} -> {request.sid}')
-    except Exception as e:
-        print(f'✖ Error in register: {e}')
-
-@socketio.on('call-user')
-def on_call_user(data):
-    try:
-        from_user = str(session.get('user_id'))
-        target = str(data.get('to'))
-        offer = data.get('offer')
-
-        print(f'[call-user] {from_user} → {target}')
-
-        if target in in_call_users:
-            print(f'    {target} is busy')
-            emit('user-busy', {'to': target}, room=request.sid)
-            return
-
-        sid = connected_users.get(target)
-        if not sid:
-            print(f'    Target {target} not connected!')
-            emit('user-offline', {'to': target}, room=request.sid)
-            return
-
-        in_call_users.add(from_user)
-        in_call_users.add(target)
-
-        emit('call-made', {
-            'from': from_user,
-            'offer': offer
-        }, room=sid)
-
-    except Exception as e:
-        print(f'✖ Error in call-user: {e}')
-
-
-@socketio.on('make-answer')
-def on_make_answer(data):
-    try:
-        from_user = str(session.get('user_id'))
-        target = str(data.get('to'))
-        answer = data.get('answer')
-
-        print(f'[make-answer] {from_user} → {target}')
-
-        sid = connected_users.get(target)
-        if sid:
-            emit('answer-made', {
-                'from': from_user,
-                'answer': answer
-            }, room=sid)
-
-    except Exception as e:
-        print(f'✖ Error in make-answer: {e}')
-
-
-@socketio.on('reject-call')
-def on_reject_call(data):
-    try:
-        from_user = str(session.get('user_id'))
-        to = str(data.get('to'))
-
-        in_call_users.discard(from_user)
-        in_call_users.discard(to)
-
-        sid = connected_users.get(to)
-        if sid:
-            emit('call-rejected', {'from': from_user}, room=sid)
-
-        print(f'[reject-call] {from_user} rejected call from {to}')
-    except Exception as e:
-        print(f'✖ Error in reject-call: {e}')
-
-
-@socketio.on('end-call')
-def on_end_call(data):
-    try:
-        from_user = str(session.get('user_id'))
-        to = str(data.get('to'))
-
-        in_call_users.discard(from_user)
-        in_call_users.discard(to)
-
-        sid = connected_users.get(to)
-        if sid:
-            emit('call-ended', {'from': from_user}, room=sid)
-
-        print(f'[end-call] {from_user} ended call with {to}')
-    except Exception as e:
-        print(f'✖ Error in end-call: {e}')
-
-
-@socketio.on('ice-candidate')
-def on_ice_candidate(data):
-    try:
-        from_user = str(session.get('user_id'))
-        target = str(data.get('to'))
-        candidate = data.get('candidate')
-
-        sid = connected_users.get(target)
-        if sid:
-            emit('ice-candidate', {
-                'from': from_user,
-                'candidate': candidate
-            }, room=sid)
-
-    except Exception as e:
-        print(f'✖ Error in ice-candidate: {e}')
+if __name__ == "__main__":
+    socketio.run(app, debug=True)
 
 
 @app.route('/login', methods=['GET', 'POST'])
