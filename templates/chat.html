@@ -113,29 +113,40 @@
     
         callBtn.disabled = true;
     
-        // Подготовка SIP UserAgent (конфигируется после fetch)
-        userAgent = new SIP.UserAgent({});
-        userAgent.delegate = {
-          async onInvite(inv) {
-            inviter = inv;
-            await inviter.accept({ sessionDescriptionHandlerOptions: { constraints: { audio: true, video: false } } });
-            attachMedia(inviter);
-            hangupBtn.disabled = false;
-          }
-        };
+        
     
-        // Получаем конфиг и стартуем SIP
         fetch('/sip-config')
-          .then(res => res.json())
+          .then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+          })
           .then(cfg => {
+            console.log('SIP config from server:', cfg);
             sipConfig = cfg;
-            userAgent.configuration.uri = SIP.UserAgent.makeURI(cfg.uri);
-            userAgent.configuration.transportOptions = { server: cfg.wsServers };
-            userAgent.configuration.authorizationUsername = cfg.authorizationUser;
-            userAgent.configuration.authorizationPassword = cfg.password;
-            userAgent.configuration.sessionDescriptionHandlerFactoryOptions = {
-              peerConnectionOptions: { iceServers: cfg.iceServers }
+    
+            // Создаём и настраиваем UserAgent именно здесь
+            userAgent = new SIP.UserAgent({
+              uri: SIP.UserAgent.makeURI(cfg.uri),
+              transportOptions: { server: cfg.wsServers },
+              authorizationUsername: cfg.authorizationUser,
+              authorizationPassword: cfg.password,
+              sessionDescriptionHandlerFactoryOptions: {
+                peerConnectionOptions: { iceServers: cfg.iceServers }
+              }
+            });
+    
+            userAgent.delegate = {
+              async onInvite(inv) {
+                inviter = inv;
+                await inviter.accept({
+                  sessionDescriptionHandlerOptions: { constraints: { audio: true, video: false } }
+                });
+                attachMedia(inviter);
+                hangupBtn.disabled = false;
+              }
             };
+    
+            // Стартуем UA
             return userAgent.start();
           })
           .then(() => userAgent.register())
