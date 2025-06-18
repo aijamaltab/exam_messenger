@@ -32,25 +32,37 @@ socket.on("joined", async () => {
   addChat("Система", `Вы вошли в комнату ${room} как ${username}`);
 });
 
-socket.on("signal", async (data) => {
-  if (!pc) await createPeerConnection();
+socket.on("signal", async ({ room: incomingRoom, data: payload }) => {
+  if (incomingRoom !== room) return;  // незапрошенные комнаты игнорируем
 
-  if (data.type === "offer") {
+  if (!pc) {
+    pc = createPeerConnection();
+    attachLogging(pc);
+  }
+
+  if (payload.type === "offer") {
     playRingtone();
-    await pc.setRemoteDescription(new RTCSessionDescription(data));
+    await pc.setRemoteDescription(new RTCSessionDescription(payload));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     socket.emit("signal", { room, data: pc.localDescription });
     stopRingtone();
-  } else if (data.type === "answer") {
+
+  } else if (payload.type === "answer") {
     stopRingtone();
+    // ответ применяем только если была локальная офер‑сессия
     if (pc.signalingState === "have-local-offer") {
-      await pc.setRemoteDescription(new RTCSessionDescription(data));
+      await pc.setRemoteDescription(new RTCSessionDescription(payload));
     } else {
-      console.warn("Нельзя установить remoteDescription answer — состояние:", pc.signalingState);
+      console.warn("Нельзя установить remoteDescription(answer) при signalingState =", pc.signalingState);
     }
-  } else if (data.candidate) {
-    await pc.addIceCandidate(new RTCIceCandidate(data));
+
+  } else if (payload.candidate) {
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(payload));
+    } catch (e) {
+      console.error("Ошибка добавления ICE-кандидата:", e);
+    }
   }
 });
 
@@ -74,23 +86,43 @@ async function startCall() {
 }
 
 async function createPeerConnection() {
+  // Создаём новое соединение
   pc = new RTCPeerConnection(config);
 
+  // Логирование состояний WebRTC
+  pc.onicegatheringstatechange = () =>
+    console.log("ICE gathering state:", pc.iceGatheringState);
+  pc.oniceconnectionstatechange = () =>
+    console.log("ICE connection state:", pc.iceConnectionState);
+  pc.onsignalingstatechange = () =>
+    console.log("Signaling state:", pc.signalingState);
+  pc.onconnectionstatechange = () =>
+    console.log("PeerConnection state:", pc.connectionState);
+
+  // Отправка ICE-кандидатов через сигналинг
   pc.onicecandidate = (event) => {
     if (event.candidate) {
       socket.emit("signal", { room, data: event.candidate });
+      console.log("Sent ICE candidate:", event.candidate);
     }
   };
 
+  // Приём медиапотока от удалённого пира
   pc.ontrack = (event) => {
+    console.log("Received remote track:", event.streams[0]);
     remoteVideo.srcObject = event.streams[0];
   };
 
+  // Добавляем локальные треки в соединение
   const stream = localVideo.srcObject;
   stream.getTracks().forEach((track) => {
     pc.addTrack(track, stream);
+    console.log("Added local track:", track.kind);
   });
+
+  return pc;
 }
+
 
 // ---- Чат ----
 
