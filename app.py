@@ -70,14 +70,17 @@ def on_disconnect():
 @socketio.on('register')
 def on_register(data):
     print('→ [server] register:', data, '   all users map:', connected_users)
-    user_id = data.get('user_id')
-    if user_id:
+    try:
+        user_id = int(data.get('user_id'))
         connected_users[user_id] = request.sid
         print(f'    mapped user {user_id} -> {request.sid}')
+    except Exception as e:
+        print(f'✖ Error in register: {e}')
+
 
 @socketio.on('call-user')
 def on_call_user(data):
-    target = int(data.get('to'))         # ← приводим к int
+    target = int(data.get('to'))        # ← приводим к int
     offer  = data.get('offer')
     print('→ [server] call-user:', data, ' map:', connected_users)
     sid = connected_users.get(target)
