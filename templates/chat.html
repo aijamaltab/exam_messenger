@@ -17,7 +17,7 @@
     <ul id="users" class="user-list">
       {% for user in users %}
       <li class="user-item" data-id="{{ user[0] }}">
-        <strong class="user-name">{{ user[1] }}</strong><br>
+        <strong>{{ user[1] }}</strong><br>
         <small>{{ user[2] }}</small>
         <button class="call-user-btn">📞</button>
       </li>
@@ -30,69 +30,142 @@
     </div>
     <div id="chat-box" class="chat-box"></div>
     <div class="chat-controls">
-      <input type="text" id="messageInput" placeholder="Enter a message" />
-      <button id="sendBtn">➤</button>
+      <input type="text" id="messageInput" placeholder="Enter a message">
+      <button onclick="sendMessage()">➤</button>
     </div>
   </div>
 </div>
 
 <script>
   const socket = io();
+  const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
   const localUserId = "{{ session['user_id'] }}";
+  const peerConnections = new Map();
+  const pendingCandidates = {};
+  let localStream = null;
   let selectedUserId = null;
 
-  // On page load, set up user selection
-  document.addEventListener('DOMContentLoaded', () => {
+  socket.on('connect', () => {
+    console.log('✔ Socket connected:', socket.id);
+    socket.emit('register', { user_id: localUserId });
+  });
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    localStream = await getLocalStream();
+    attachLocalStream(localStream);
+
     document.querySelectorAll('.user-item').forEach(item => {
+      const targetId = item.dataset.id;
+      const btn = item.querySelector('.call-user-btn');
+      if (targetId === localUserId) btn.disabled = true;
+
+      // 👉 Выбор пользователя
       item.addEventListener('click', () => {
-        selectedUserId = item.getAttribute('data-id');
-        const userName = item.querySelector('.user-name').innerText;
-        document.getElementById('chat-with').innerText = `Chat with ${userName}`;
-        // Highlight selected
-        document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
-        item.classList.add('active');
-        // Clear chat box
-        document.getElementById('chat-box').innerHTML = '';
+        selectedUserId = targetId;
+        document.getElementById('chat-with').textContent = 'Chat with ' + item.querySelector('strong').textContent;
+        loadMessages(selectedUserId);
       });
+
+      btn.addEventListener('click', () => startCall(targetId));
     });
 
-    // Send message on button click
-    document.getElementById('sendBtn').addEventListener('click', sendMessage);
+    // ========== Видеозвонки ==========
+    socket.on('call-made', async ({ from, offer }) => {
+      const pc = createPeerConnection(from);
+      peerConnections.set(from, pc);
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('make-answer', { to: from, answer });
+      if (pendingCandidates[from]) {
+        for (const candidate of pendingCandidates[from]) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+        delete pendingCandidates[from];
+      }
+    });
 
-    // Receive private message
-    socket.on('private_message', ({ from, message }) => {
-      // Only show if chat with that user
-      if (selectedUserId === from) appendMessage(from, message, false);
+    socket.on('answer-made', async ({ from, answer }) => {
+      const pc = peerConnections.get(from);
+      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    });
+
+    socket.on('ice-candidate', async ({ from, candidate }) => {
+      const pc = peerConnections.get(from);
+      if (pc) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        pendingCandidates[from] = pendingCandidates[from] || [];
+        pendingCandidates[from].push(candidate);
+      }
+    });
+
+    // ========== Сообщения ==========
+    socket.on('new_message', data => {
+      const { from_user_id, to_user_id } = data;
+      if ((from_user_id == selectedUserId && to_user_id == localUserId) ||
+          (from_user_id == localUserId && to_user_id == selectedUserId)) {
+        loadMessages(selectedUserId);
+      }
     });
   });
 
-  function sendMessage() {
-    const input = document.getElementById('messageInput');
-    const text = input.value.trim();
-    if (!text || !selectedUserId) return;
-    // Emit private message
-    socket.emit('private_message', { to: selectedUserId, message: text });
-    appendMessage(localUserId, text, true);
-    input.value = '';
+  async function startCall(to) {
+    const pc = createPeerConnection(to);
+    peerConnections.set(to, pc);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit('call-user', { to, offer });
   }
 
-  function appendMessage(userId, text, isSelf) {
-    const box = document.getElementById('chat-box');
-    const div = document.createElement('div');
-    div.className = 'chat-message' + (isSelf ? ' self' : '');
-    div.innerHTML = `<strong>${isSelf ? 'You' : ''}</strong> ${text}`;
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
+  function createPeerConnection(peerId) {
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    pc.onicecandidate = event => {
+      if (event.candidate) {
+        socket.emit('ice-candidate', { to: peerId, candidate: event.candidate });
+      }
+    };
+    pc.ontrack = event => attachRemoteStream(event.streams[0]);
+    return pc;
   }
-  document.querySelectorAll('.user-item').forEach(item => {
-    item.addEventListener('click', () => {
-      selectedUserId = item.dataset.id;
-      document.getElementById('chat-with').textContent = 'Chat with ' + item.querySelector('strong').textContent;
-      loadMessages(selectedUserId);
-    });
-  });
 
-  // Загрузка сообщений из БД
+  async function getLocalStream() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      return stream;
+    } catch (err) {
+      alert('Разрешите доступ к микрофону');
+      throw err;
+    }
+  }
+
+  function attachLocalStream(stream) {
+    let audio = document.getElementById('localAudio');
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.id = 'localAudio';
+      audio.autoplay = true;
+      audio.muted = true;
+      document.body.appendChild(audio);
+    }
+    audio.srcObject = stream;
+  }
+
+  function attachRemoteStream(stream) {
+    let audio = document.getElementById('remoteAudio');
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.id = 'remoteAudio';
+      audio.autoplay = true;
+      document.body.appendChild(audio);
+    }
+    audio.srcObject = stream;
+    audio.play().catch(e => console.log('Ошибка воспроизведения:', e));
+  }
+
+  // ========== ЧАТ ==========
+
   function loadMessages(userId) {
     fetch(`/messages/${userId}`)
       .then(res => res.json())
@@ -109,7 +182,6 @@
       });
   }
 
-  // Отправка сообщения
   function sendMessage() {
     const input = document.getElementById('messageInput');
     const message = input.value.trim();
@@ -117,7 +189,7 @@
 
     fetch('/send', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to_user_id: selectedUserId, message })
     })
     .then(res => res.json())
@@ -125,21 +197,14 @@
       input.value = '';
     });
   }
-
-  // При поступлении нового сообщения — обновляем чат
-  socket.on('new_message', data => {
-    const current = selectedUserId;
-    const from = String(data.from_user_id);
-    const to = String(data.to_user_id);
-    const me = "{{ session['user_id'] }}";
-
-    // Показываем только если это чат с этим пользователем
-    if ((from === current && to === me) || (from === me && to === current)) {
-      loadMessages(current);
-    }
-  });
 </script>
 
+
+
+
+
+<audio id="localAudio" autoplay muted></audio>
+<audio id="remoteAudio" autoplay></audio>
 {% endif %}
 </body>
 </html>
