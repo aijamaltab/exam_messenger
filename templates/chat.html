@@ -112,6 +112,11 @@
   });
 
   async function startCall(to) {
+    if (!localStream) {
+      localStream = await getLocalStream();
+      attachLocalStream(localStream);
+    }
+    
     const pc = createPeerConnection(to);
     peerConnections.set(to, pc);
     const offer = await pc.createOffer();
@@ -120,6 +125,7 @@
   
     document.getElementById('endCallBtn').style.display = 'inline-block'; // показать кнопку завершения
   }
+
 
 
   function createPeerConnection(peerId) {
@@ -201,7 +207,45 @@
       input.value = '';
     });
   }
-  
+  function endCall() {
+  // Отключаем все peerConnections
+  peerConnections.forEach((pc, peerId) => {
+    pc.getSenders().forEach(sender => {
+      try {
+        pc.removeTrack(sender);
+      } catch (e) {
+        console.warn('Ошибка removeTrack:', e);
+      }
+    });
+    pc.close();
+    peerConnections.delete(peerId);
+  });
+
+  // Останавливаем локальный поток
+  if (localStream) {
+    localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+  }
+
+  // Очищаем аудио-элементы
+  const remoteAudio = document.getElementById('remoteAudio');
+  if (remoteAudio) {
+    remoteAudio.pause();
+    remoteAudio.srcObject = null;
+  }
+
+  const localAudio = document.getElementById('localAudio');
+  if (localAudio) {
+    localAudio.pause();
+    localAudio.srcObject = null;
+  }
+
+  // Скрываем кнопку завершения звонка
+  document.getElementById('endCallBtn').style.display = 'none';
+
+  console.log('Звонок завершён');
+}
+
 </script>
 
 
