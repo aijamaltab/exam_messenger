@@ -60,6 +60,10 @@ def sip_config():
 @app.route('/')
 def home():
     return redirect('/chat') if 'user_id' in session else redirect('/login')
+    
+@socketio.on('connect')
+def handle_connect():
+    print("Клиент подключён")
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -168,4 +172,4 @@ def logout():
     return redirect('/login')
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
+    socketio.run(app, host='0.0.0.0', port=8080)
