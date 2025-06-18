@@ -48,12 +48,12 @@ def sip_config():
     if 'user_id' not in session:
         return jsonify({'error': 'Unauthorized'}), 401
     return jsonify({
-        "wsServers": ["wss://sip.antisip.com:4443/ws"],
-        "uri":       "sip:sellinx@sip.antisip.com",
-        "authorizationUser": "sellinx",
-        "password":  "Aijamal29062004",
-        "domain":    "sip.antisip.com",
-        "iceServers": [{"urls":["stun:stun.l.google.com:19302"]}]
+      "wsServers": ["wss://sip.antisip.com:4443/ws"],
+      "uri":               "sip:sellinx@sip.antisip.com",
+      "authorizationUser": "sellinx",
+      "password":          "<ваш‑пароль‑от‑Antisip>",
+      "domain":            "sip.antisip.com",
+      "iceServers":        [{"urls":["stun:stun.l.google.com:19302"]}]
     })
 
 
