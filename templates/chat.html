@@ -93,9 +93,7 @@
     }
     /* Скрываем видео элементы */
     #localVideo,
-    #remoteVideo {
-      display: none;
-    }
+    #remoteVideo,
     audio {
       display: none;
     }
@@ -107,18 +105,18 @@
     <div class="section">
       <input id="usernameInput" type="text" placeholder="Ваше имя (например, 1002)" />
       <input id="roomInput" type="text" placeholder="Комната (например, 1001)" />
-      <button onclick="joinCall()">🔗 Войти в комнату</button>
+      <button id="btnJoin">🔗 Войти в комнату</button>
     </div>
     <div class="section" style="display: flex; gap: 10px;">
-      <button style="flex:1;" onclick="startCall()">📞 Позвонить</button>
-      <button style="flex:1; background-color: #ef4444; border-color: #dc2626;" onclick="stopCall()">⏹️ Остановить звонок</button>
+      <button id="btnCall" style="flex:1;">📞 Позвонить</button>
+      <button id="btnStop" style="flex:1; background-color: #ef4444; border-color: #dc2626;">⏹️ Остановить звонок</button>
     </div>
     <div class="section">
       <h3 style="color: var(--primary); margin-bottom: 8px;">💬 Чат</h3>
       <div id="chatBox"></div>
       <div class="chat-input">
         <input id="chatInput" type="text" placeholder="Написать сообщение..." />
-        <button onclick="sendMessage()">✉️ Отправить</button>
+        <button id="btnSend">✉️ Отправить</button>
       </div>
     </div>
     <!-- Скрытые видео и аудио для WebRTC -->
@@ -131,20 +129,5 @@
   <!-- Скрипты -->
   <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
   <script src="/static/client.js"></script>
-  <script>
-    // Останавливаем звонок: закрываем PeerConnection и сбрасываем
-    function stopCall() {
-      if (window.pc) {
-        window.pc.close();
-        window.pc = null;
-      }
-      // Останавливаем рингтон
-      const ringtone = document.getElementById('ringtone');
-      ringtone.pause();
-      ringtone.currentTime = 0;
-      // Уведомляем в чате
-      addChat('Система', 'Звонок остановлен');
-    }
-  </script>
 </body>
 </html>
