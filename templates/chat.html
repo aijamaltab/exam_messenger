@@ -40,121 +40,110 @@
   const socket = io();
   const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 
-  let currentChatUserId = null;
+  const localUserId = "{{ session['user_id'] }}";
   const peerConnections = new Map();
   const pendingCandidates = {};
+  let localStream = null;
 
   socket.on('connect', () => {
-    console.log('Socket connected:', socket.id);
-    socket.emit('register', { user_id: {{ session["user_id"] }} });
+    console.log('✔ Socket connected:', socket.id);
+    socket.emit('register', { user_id: localUserId });
   });
 
-  document.addEventListener('DOMContentLoaded', () => {
-    // 1) Привязываем клики по списку пользователей
+  document.addEventListener('DOMContentLoaded', async () => {
+    // Получаем локальный микрофон один раз
+    localStream = await getLocalStream();
+
+    // Назначаем обработчики на кнопки вызова
     document.querySelectorAll('.user-item').forEach(item => {
       const btn = item.querySelector('.call-user-btn');
-      const uid = item.dataset.id;
-      // Запрет звонить себе
-      if (uid === '{{ session["user_id"] }}') {
+      const targetId = item.dataset.id;
+      if (targetId === localUserId) {
         btn.disabled = true;
         return;
       }
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        startCall(uid);
-      });
+      btn.addEventListener('click', () => startCall(targetId));
     });
 
-    // 2) Сигнальные события
-    socket.on('call-made', async data => {
-      console.log('← received call-made', data);
-      try {
-        await handleIncomingCall(data.from, data.offer);
-      } catch (err) {
-        console.error('✖ Error in handleIncomingCall:', err);
+    // Событие входящего звонка
+    socket.on('call-made', async ({ from, offer }) => {
+      console.log('← Incoming call from', from);
+      const pc = createPeerConnection(from);
+      peerConnections.set(from, pc);
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('make-answer', { to: from, answer });
+
+      // Добавим отложенные ICE кандидаты
+      if (pendingCandidates[from]) {
+        for (const candidate of pendingCandidates[from]) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+        delete pendingCandidates[from];
       }
     });
 
-    socket.on('answer-made', data => {
-      console.log('← received answer-made', data);
-      const pc = peerConnections.get(data.from);
+    // Событие ответа на звонок
+    socket.on('answer-made', async ({ from, answer }) => {
+      console.log('← Answer from', from);
+      const pc = peerConnections.get(from);
       if (pc) {
-        pc.setRemoteDescription(new RTCSessionDescription(data.answer))
-          .then(() => console.log('   · setRemoteDescription(answer)'))
-          .catch(e => console.error(e));
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
       }
     });
 
-    socket.on('ice-candidate', data => {
-      console.log('← received ice-candidate', data);
-      const pc = peerConnections.get(data.from);
+    // Событие ICE-кандидата
+    socket.on('ice-candidate', async ({ from, candidate }) => {
+      const pc = peerConnections.get(from);
       if (pc) {
-        pc.addIceCandidate(new RTCIceCandidate(data.candidate))
-          .then(() => console.log('   · added ICE candidate'))
-          .catch(e => console.error(e));
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } else {
-        pendingCandidates[data.from] = pendingCandidates[data.from] || [];
-        pendingCandidates[data.from].push(data.candidate);
+        pendingCandidates[from] = pendingCandidates[from] || [];
+        pendingCandidates[from].push(candidate);
       }
     });
-  }); // ← не забудьте закрыть DOMContentLoaded
+  });
 
-  // 3) Функции вне DOMContentLoaded
-  async function startCall(targetId) {
-    console.log('→ startCall to', targetId);
-    const localStream = await getLocalStream();
-    const pc = createPeerConnection(targetId, localStream);
-    peerConnections.set(targetId, pc);
+  async function startCall(to) {
+    console.log('→ Calling', to);
+    const pc = createPeerConnection(to);
+    peerConnections.set(to, pc);
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    socket.emit('call-user', { to: targetId, offer });
-    console.log('→ emitted call-user');
+    socket.emit('call-user', { to, offer });
   }
 
-  async function handleIncomingCall(fromId, offer) {
-    console.log('→ handleIncomingCall from', fromId);
-    const localStream = await getLocalStream();
-    const pc = createPeerConnection(fromId, localStream);
-    peerConnections.set(fromId, pc);
-
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    (pendingCandidates[fromId] || []).forEach(async cand => {
-      await pc.addIceCandidate(new RTCIceCandidate(cand));
-    });
-    delete pendingCandidates[fromId];
-
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    socket.emit('make-answer', { to: fromId, answer });
-    console.log('→ emitted make-answer');
-  }
-
-  // Объединённый фабричный метод
-  function createPeerConnection(peerId, stream) {
+  function createPeerConnection(peerId) {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-    pc.onicecandidate = e => {
-      if (e.candidate) {
-        socket.emit('ice-candidate', { to: peerId, candidate: e.candidate });
+    // Добавляем локальные аудио-дорожки
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    pc.onicecandidate = event => {
+      if (event.candidate) {
+        socket.emit('ice-candidate', { to: peerId, candidate: event.candidate });
       }
     };
 
-    pc.ontrack = e => {
-      attachRemoteStream(e.streams[0]);
+    pc.ontrack = event => {
+      attachRemoteStream(event.streams[0]);
     };
 
-    attachLocalStream(stream);
+    attachLocalStream(localStream);
     return pc;
   }
 
   async function getLocalStream() {
     try {
-      return await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (e) {
-      console.error('Error accessing media devices.', e);
-      throw e;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      return stream;
+    } catch (err) {
+      console.error('Ошибка доступа к микрофону:', err);
+      alert('Пожалуйста, разрешите доступ к микрофону.');
+      throw err;
     }
   }
 
@@ -164,7 +153,7 @@
       audio = document.createElement('audio');
       audio.id = 'localAudio';
       audio.autoplay = true;
-      audio.muted = true;
+      audio.muted = true; // важно
       document.body.appendChild(audio);
     }
     audio.srcObject = stream;
@@ -181,6 +170,7 @@
     audio.srcObject = stream;
   }
 </script>
+
 
 
 <audio id="localAudio" autoplay muted></audio>
