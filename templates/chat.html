@@ -1,10 +1,91 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Messenger Aijamal</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="{{ url_for('static', filename='sip-0.21.2.min.js') }}"></script>
+  <style>
+    body, html {
+      margin: 0; padding: 0; height: 100%; font-family: Arial, sans-serif;
+      background: #f0f0f0;
+    }
+    .container {
+      display: flex; height: 100vh;
+    }
+    .sidebar {
+      width: 250px; background: #222; color: white; padding: 10px; box-sizing: border-box;
+      display: flex; flex-direction: column;
+    }
+    .sidebar h2 {
+      margin-top: 10px; margin-bottom: 10px;
+    }
+    .user-list {
+      list-style: none; padding: 0; margin: 0; flex-grow: 1; overflow-y: auto;
+    }
+    .user-item {
+      background: #333; margin-bottom: 8px; padding: 8px; border-radius: 4px; cursor: pointer;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .user-item:hover {
+      background: #444;
+    }
+    .user-item strong {
+      font-weight: bold;
+    }
+    .user-item small {
+      display: block; font-size: 0.75em; color: #aaa;
+    }
+    .call-user-btn {
+      background: #0a84ff; border: none; color: white; border-radius: 4px; padding: 4px 8px;
+      cursor: pointer;
+    }
+    .call-user-btn:disabled {
+      background: #555; cursor: default;
+    }
+    .chat {
+      flex-grow: 1; display: flex; flex-direction: column; background: white;
+      border-left: 1px solid #ccc;
+    }
+    .chat-header {
+      padding: 10px; border-bottom: 1px solid #ccc; background: #eee;
+    }
+    #chat-box {
+      flex-grow: 1; padding: 10px; overflow-y: auto;
+      background: #fafafa;
+    }
+    .msg {
+      margin-bottom: 10px; padding: 6px 12px; border-radius: 12px; max-width: 70%;
+      word-wrap: break-word;
+      display: inline-block;
+      clear: both;
+    }
+    .msg-me {
+      background: #0a84ff; color: white; float: right;
+    }
+    .msg-other {
+      background: #ddd; color: black; float: left;
+    }
+    .msg small {
+      display: block; font-size: 0.65em; margin-top: 4px; opacity: 0.7;
+    }
+    .chat-controls {
+      padding: 10px; border-top: 1px solid #ccc; background: #eee;
+      display: flex; gap: 6px;
+    }
+    #messageInput {
+      flex-grow: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px;
+      font-size: 1em;
+    }
+    .chat-controls button {
+      background: #0a84ff; color: white; border: none; border-radius: 4px; padding: 0 16px;
+      cursor: pointer; font-size: 1.2em;
+    }
+    #endCallBtn {
+      background: #ff3b30;
+    }
+  </style>
 </head>
 <body>
 {% if session.get('user_id') %}
@@ -17,8 +98,10 @@
     <ul id="users" class="user-list">
       {% for user in users %}
       <li class="user-item" data-id="{{ user[0] }}">
-        <strong>{{ user[1] }}</strong><br>
-        <small>{{ user[2] }}</small>
+        <div>
+          <strong>{{ user[1] }}</strong><br>
+          <small>{{ user[2] }}</small>
+        </div>
         <button class="call-user-btn">📞</button>
       </li>
       {% endfor %}
@@ -30,12 +113,15 @@
     </div>
     <div id="chat-box" class="chat-box"></div>
     <div class="chat-controls">
-      <input type="text" id="messageInput" placeholder="Enter a message">
+      <input type="text" id="messageInput" placeholder="Enter a message" autocomplete="off" />
       <button onclick="sendMessage()">➤</button>
       <button id="endCallBtn" onclick="endCall()" style="display:none;">❌ End Call</button>
     </div>
   </div>
 </div>
+
+<audio id="localAudio" autoplay muted></audio>
+<audio id="remoteAudio" autoplay></audio>
 
 <script>
   const socket = io();
@@ -60,30 +146,41 @@
       const btn = item.querySelector('.call-user-btn');
       if (targetId === localUserId) btn.disabled = true;
 
-      // 👉 Выбор пользователя
+      // Выбор пользователя для чата
       item.addEventListener('click', () => {
         selectedUserId = targetId;
         document.getElementById('chat-with').textContent = 'Chat with ' + item.querySelector('strong').textContent;
         loadMessages(selectedUserId);
       });
 
-      btn.addEventListener('click', () => startCall(targetId));
+      // Кнопка звонка
+      btn.addEventListener('click', e => {
+        e.stopPropagation(); // не срабатывать на событие выбора чата
+        startCall(targetId);
+      });
     });
 
-    // ========== Видеозвонки ==========
+    // Обработка входящих звонков и сигналов WebRTC
     socket.on('call-made', async ({ from, offer }) => {
+      if (peerConnections.has(from)) {
+        console.warn('Уже есть соединение с', from);
+        return;
+      }
       const pc = createPeerConnection(from);
       peerConnections.set(from, pc);
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('make-answer', { to: from, answer });
+
       if (pendingCandidates[from]) {
         for (const candidate of pendingCandidates[from]) {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
         }
         delete pendingCandidates[from];
       }
+
+      document.getElementById('endCallBtn').style.display = 'inline-block';
     });
 
     socket.on('answer-made', async ({ from, answer }) => {
@@ -101,7 +198,7 @@
       }
     });
 
-    // ========== Сообщения ==========
+    // Новое сообщение
     socket.on('new_message', data => {
       const { from_user_id, to_user_id } = data;
       if ((from_user_id == selectedUserId && to_user_id == localUserId) ||
@@ -116,27 +213,37 @@
       localStream = await getLocalStream();
       attachLocalStream(localStream);
     }
-    
+
+    if (peerConnections.has(to)) {
+      alert('Уже есть звонок с этим пользователем');
+      return;
+    }
+
     const pc = createPeerConnection(to);
     peerConnections.set(to, pc);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socket.emit('call-user', { to, offer });
-  
-    document.getElementById('endCallBtn').style.display = 'inline-block'; // показать кнопку завершения
+
+    document.getElementById('endCallBtn').style.display = 'inline-block';
   }
-
-
 
   function createPeerConnection(peerId) {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    if(localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     pc.onicecandidate = event => {
       if (event.candidate) {
         socket.emit('ice-candidate', { to: peerId, candidate: event.candidate });
       }
     };
     pc.ontrack = event => attachRemoteStream(event.streams[0]);
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "disconnected" || pc.connectionState === "failed" || pc.connectionState === "closed") {
+        peerConnections.delete(peerId);
+        document.getElementById('endCallBtn').style.display = 'none';
+        removeRemoteAudio();
+      }
+    };
     return pc;
   }
 
@@ -174,8 +281,15 @@
     audio.play().catch(e => console.log('Ошибка воспроизведения:', e));
   }
 
-  // ========== ЧАТ ==========
+  function removeRemoteAudio() {
+    const remoteAudio = document.getElementById('remoteAudio');
+    if (remoteAudio) {
+      remoteAudio.pause();
+      remoteAudio.srcObject = null;
+    }
+  }
 
+  // Загрузка сообщений из API
   function loadMessages(userId) {
     fetch(`/messages/${userId}`)
       .then(res => res.json())
@@ -185,13 +299,14 @@
         data.forEach(msg => {
           const div = document.createElement('div');
           div.className = msg.from_me ? 'msg msg-me' : 'msg msg-other';
-          div.innerHTML = `<span>${msg.message}</span><small>${msg.timestamp}</small>`;
+          div.innerHTML = `<span>${escapeHtml(msg.message)}</span><small>${msg.timestamp}</small>`;
           box.appendChild(div);
         });
         box.scrollTop = box.scrollHeight;
       });
   }
 
+  // Отправка сообщения на сервер
   function sendMessage() {
     const input = document.getElementById('messageInput');
     const message = input.value.trim();
@@ -205,55 +320,65 @@
     .then(res => res.json())
     .then(() => {
       input.value = '';
+      loadMessages(selectedUserId);
     });
   }
+
   function endCall() {
-  // Отключаем все peerConnections
-  peerConnections.forEach((pc, peerId) => {
-    pc.getSenders().forEach(sender => {
+    // Отключаем все соединения
+    peerConnections.forEach((pc, peerId) => {
       try {
-        pc.removeTrack(sender);
-      } catch (e) {
-        console.warn('Ошибка removeTrack:', e);
-      }
+        pc.getSenders().forEach(sender => pc.removeTrack(sender));
+      } catch {}
+      pc.close();
+      peerConnections.delete(peerId);
     });
-    pc.close();
-    peerConnections.delete(peerId);
+
+    // Останавливаем локальный поток
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      localStream = null;
+    }
+
+    removeRemoteAudio();
+
+    // Скрываем кнопку завершения звонка
+    document.getElementById('endCallBtn').style.display = 'none';
+
+    console.log('Звонок завершён');
+  }
+
+  // ======= JsSIP SIP аккаунт =======
+  const sipConfig = {
+    sockets: [ new JsSIP.WebSocketInterface('wss://sip2sip.info:7443') ],
+    uri: 'sip:sellinx@sip2sip.info', // замените на ваш SIP URI
+    password: 'твой_пароль',         // замените на ваш пароль
+    session_timers: false,
+  };
+
+  const ua = new JsSIP.UA(sipConfig);
+
+  ua.start();
+
+  ua.on('registered', () => console.log('SIP аккаунт зарегистрирован'));
+  ua.on('registrationFailed', e => console.error('Ошибка регистрации SIP:', e.cause));
+  ua.on('newRTCSession', e => {
+    console.log('Новая SIP сессия:', e);
+    // Можно добавить логику для входящих звонков SIP
   });
 
-  // Останавливаем локальный поток
-  if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
-    localStream = null;
+  // Простая защита от XSS
+  function escapeHtml(text) {
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
   }
-
-  // Очищаем аудио-элементы
-  const remoteAudio = document.getElementById('remoteAudio');
-  if (remoteAudio) {
-    remoteAudio.pause();
-    remoteAudio.srcObject = null;
-  }
-
-  const localAudio = document.getElementById('localAudio');
-  if (localAudio) {
-    localAudio.pause();
-    localAudio.srcObject = null;
-  }
-
-  // Скрываем кнопку завершения звонка
-  document.getElementById('endCallBtn').style.display = 'none';
-
-  console.log('Звонок завершён');
-}
-
 </script>
-
-
-
-
-
-<audio id="localAudio" autoplay muted></audio>
-<audio id="remoteAudio" autoplay></audio>
 {% endif %}
 </body>
 </html>
