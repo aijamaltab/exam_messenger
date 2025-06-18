@@ -116,7 +116,10 @@
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     socket.emit('call-user', { to, offer });
+  
+    document.getElementById('endCallBtn').style.display = 'inline-block'; // показать кнопку завершения
   }
+
 
   function createPeerConnection(peerId) {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -197,6 +200,7 @@
       input.value = '';
     });
   }
+  
 </script>
 
 
