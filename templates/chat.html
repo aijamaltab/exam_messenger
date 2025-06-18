@@ -5,7 +5,7 @@
   <title>Messenger Aijamal</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='sip-0.21.2.min.js') }}"></script>
-
+  <script src="/socket.io/socket.io.js"></script>
 
 
 </head>
@@ -211,9 +211,8 @@
     </script>
 
   {% endif %}
+  
+  <audio id="remoteAudio" autoplay></audio>
+  <audio id="localAudio" autoplay muted></audio>
 </body>
-<audio id="remoteAudio" autoplay></audio>
-<audio id="localAudio" autoplay muted></audio>
-
-
 </html>
