@@ -1,4 +1,10 @@
+// Получаем уникальный ID сокета, чтобы не обрабатывать собственные сигналы
 let socket = io();
+let myId = null;
+socket.on("connect", () => {
+  myId = socket.id;
+});
+
 let room = null;
 let username = null;
 let pc = null;
@@ -8,21 +14,23 @@ const remoteVideo = document.getElementById("remoteVideo");
 const ringtone = document.getElementById("ringtone");
 
 const config = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    // при необходимости можно добавить TURN:
+    // {
+    //   urls: "turn:turn.example.com:3478",
+    //   username: "user",
+    //   credential: "pass"
+    // }
+  ],
 };
 
 async function joinCall() {
   room = document.getElementById("roomInput").value.trim();
   username = document.getElementById("usernameInput").value.trim() || "Аноним";
 
-  if (!room) {
-    alert("Введите комнату");
-    return;
-  }
-  if (!username) {
-    alert("Введите имя");
-    return;
-  }
+  if (!room) return alert("Введите комнату");
+  if (!username) return alert("Введите имя");
 
   socket.emit("join", { room, username });
 }
@@ -32,12 +40,13 @@ socket.on("joined", async () => {
   addChat("Система", `Вы вошли в комнату ${room} как ${username}`);
 });
 
-socket.on("signal", async ({ room: incomingRoom, data: payload }) => {
-  if (incomingRoom !== room) return;  // незапрошенные комнаты игнорируем
+socket.on("signal", async ({ room: incomingRoom, from, data: payload }) => {
+  // Игнорируем сигналы из других комнат и свои же
+  if (incomingRoom !== room || from === myId) return;
 
+  // Если ещё нет PeerConnection — создаём новый
   if (!pc) {
-    pc = createPeerConnection();
-    attachLogging(pc);
+    pc = await createPeerConnection();
   }
 
   if (payload.type === "offer") {
@@ -45,28 +54,21 @@ socket.on("signal", async ({ room: incomingRoom, data: payload }) => {
     await pc.setRemoteDescription(new RTCSessionDescription(payload));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    socket.emit("signal", { room, data: pc.localDescription });
+    socket.emit("signal", { room, from: myId, data: pc.localDescription });
     stopRingtone();
 
   } else if (payload.type === "answer") {
     stopRingtone();
-    // ответ применяем только если была локальная офер‑сессия
-    if (pc.signalingState === "have-local-offer") {
-      await pc.setRemoteDescription(new RTCSessionDescription(payload));
-    } else {
-      console.warn("Нельзя установить remoteDescription(answer) при signalingState =", pc.signalingState);
-    }
+    await pc.setRemoteDescription(new RTCSessionDescription(payload));
 
   } else if (payload.candidate) {
     try {
       await pc.addIceCandidate(new RTCIceCandidate(payload));
     } catch (e) {
-      console.error("Ошибка добавления ICE-кандидата:", e);
+      console.error("Ошибка при добавлении ICE-кандидата:", e);
     }
   }
 });
-
-
 
 async function setupMedia() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -74,22 +76,25 @@ async function setupMedia() {
 }
 
 async function startCall() {
-  if (!room) {
-    alert("Сначала войдите в комнату");
-    return;
-  }
-  await createPeerConnection();
+  if (!room) return alert("Сначала войдите в комнату");
+  if (!pc) pc = await createPeerConnection();
+
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  socket.emit("signal", { room, data: offer });
+  socket.emit("signal", { room, from: myId, data: offer });
   playRingtone();
 }
 
 async function createPeerConnection() {
-  // Создаём новое соединение
+  // Закрываем старое соединение, если есть
+  if (pc) {
+    pc.close();
+    pc = null;
+  }
+
   pc = new RTCPeerConnection(config);
 
-  // Логирование состояний WebRTC
+  // Логируем все ключевые состояния
   pc.onicegatheringstatechange = () =>
     console.log("ICE gathering state:", pc.iceGatheringState);
   pc.oniceconnectionstatechange = () =>
@@ -99,21 +104,21 @@ async function createPeerConnection() {
   pc.onconnectionstatechange = () =>
     console.log("PeerConnection state:", pc.connectionState);
 
-  // Отправка ICE-кандидатов через сигналинг
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.emit("signal", { room, data: event.candidate });
-      console.log("Sent ICE candidate:", event.candidate);
+  // Отправка ICE-кандидатов
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      socket.emit("signal", { room, from: myId, data: e.candidate });
+      console.log("Sent ICE candidate:", e.candidate);
     }
   };
 
-  // Приём медиапотока от удалённого пира
-  pc.ontrack = (event) => {
-    console.log("Received remote track:", event.streams[0]);
-    remoteVideo.srcObject = event.streams[0];
+  // Приём медиапотока
+  pc.ontrack = (e) => {
+    console.log("Received remote track");
+    remoteVideo.srcObject = e.streams[0];
   };
 
-  // Добавляем локальные треки в соединение
+  // Добавляем локальные треки
   const stream = localVideo.srcObject;
   stream.getTracks().forEach((track) => {
     pc.addTrack(track, stream);
@@ -123,14 +128,13 @@ async function createPeerConnection() {
   return pc;
 }
 
-
 // ---- Чат ----
 
 function sendMessage() {
   const input = document.getElementById("chatInput");
   const message = input.value.trim();
   if (message && room) {
-    socket.emit("chat", { room, message });
+    socket.emit("chat", { room, username, message });
     addChat("Вы", message);
     input.value = "";
   }
@@ -152,7 +156,7 @@ socket.on("chat", (data) => {
 // ---- Звонок ----
 
 function playRingtone() {
-  ringtone.play().catch(e => console.log("Ошибка воспроизведения звонка", e));
+  ringtone.play().catch((e) => console.log("Ошибка воспроизведения звонка", e));
 }
 
 function stopRingtone() {
