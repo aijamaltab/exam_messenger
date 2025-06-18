@@ -17,7 +17,8 @@ app.secret_key = os.getenv('SECRET_KEY')
 UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-socketio = SocketIO(app)
+socketio = SocketIO(app, cors_allowed_origins="*", manage_session=True)
+
 
 # MySQL connection helper
 def get_connection():
@@ -63,10 +64,11 @@ def on_disconnect():
 
 @socketio.on('register')
 def on_register(data):
-    # альтернативный путь регистрации
+    print('→ register', data)
     user_id = data.get('user_id')
     if user_id:
         connected_users[user_id] = request.sid
+        print(f'    mapped user {user_id} -> {request.sid}')
 
 @socketio.on('call-user')
 def on_call_user(data):
