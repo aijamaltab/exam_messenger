@@ -17,7 +17,7 @@
     <ul id="users" class="user-list">
       {% for user in users %}
       <li class="user-item" data-id="{{ user[0] }}">
-        <strong>{{ user[1] }}</strong><br>
+        <strong class="user-name">{{ user[1] }}</strong><br>
         <small>{{ user[2] }}</small>
         <button class="call-user-btn">📞</button>
       </li>
@@ -30,155 +30,62 @@
     </div>
     <div id="chat-box" class="chat-box"></div>
     <div class="chat-controls">
-      <input type="text" id="messageInput" placeholder="Enter a message">
-      <button onclick="sendMessage()">➤</button>
+      <input type="text" id="messageInput" placeholder="Enter a message" />
+      <button id="sendBtn">➤</button>
     </div>
   </div>
 </div>
 
 <script>
   const socket = io();
-  const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
-
   const localUserId = "{{ session['user_id'] }}";
-  const peerConnections = new Map();
-  const pendingCandidates = {};
-  let localStream = null;
+  let selectedUserId = null;
 
-  socket.on('connect', () => {
-    console.log('✔ Socket connected:', socket.id);
-    socket.emit('register', { user_id: localUserId });
-  });
-
-  document.addEventListener('DOMContentLoaded', async () => {
-    // Получаем локальный микрофон один раз
-    localStream = await getLocalStream();
-    attachLocalStream(localStream); // один раз после получения потока
-
-    // Назначаем обработчики на кнопки вызова
+  // On page load, set up user selection
+  document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.user-item').forEach(item => {
-      const btn = item.querySelector('.call-user-btn');
-      const targetId = item.dataset.id;
-      if (targetId === localUserId) {
-        btn.disabled = true;
-        return;
-      }
-      btn.addEventListener('click', () => startCall(targetId));
+      item.addEventListener('click', () => {
+        selectedUserId = item.getAttribute('data-id');
+        const userName = item.querySelector('.user-name').innerText;
+        document.getElementById('chat-with').innerText = `Chat with ${userName}`;
+        // Highlight selected
+        document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+        item.classList.add('active');
+        // Clear chat box
+        document.getElementById('chat-box').innerHTML = '';
+      });
     });
 
-    // Событие входящего звонка
-    socket.on('call-made', async ({ from, offer }) => {
-      console.log('← Incoming call from', from);
-      const pc = createPeerConnection(from);
-      peerConnections.set(from, pc);
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    // Send message on button click
+    document.getElementById('sendBtn').addEventListener('click', sendMessage);
 
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('make-answer', { to: from, answer });
-
-      // Добавим отложенные ICE кандидаты
-      if (pendingCandidates[from]) {
-        for (const candidate of pendingCandidates[from]) {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        }
-        delete pendingCandidates[from];
-      }
-    });
-
-    // Событие ответа на звонок
-    socket.on('answer-made', async ({ from, answer }) => {
-      console.log('← Answer from', from);
-      const pc = peerConnections.get(from);
-      if (pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      }
-    });
-
-    // Событие ICE-кандидата
-    socket.on('ice-candidate', async ({ from, candidate }) => {
-      const pc = peerConnections.get(from);
-      if (pc) {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      } else {
-        pendingCandidates[from] = pendingCandidates[from] || [];
-        pendingCandidates[from].push(candidate);
-      }
+    // Receive private message
+    socket.on('private_message', ({ from, message }) => {
+      // Only show if chat with that user
+      if (selectedUserId === from) appendMessage(from, message, false);
     });
   });
 
-  async function startCall(to) {
-    console.log('→ Calling', to);
-    const pc = createPeerConnection(to);
-    peerConnections.set(to, pc);
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit('call-user', { to, offer });
+  function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const text = input.value.trim();
+    if (!text || !selectedUserId) return;
+    // Emit private message
+    socket.emit('private_message', { to: selectedUserId, message: text });
+    appendMessage(localUserId, text, true);
+    input.value = '';
   }
 
-  function createPeerConnection(peerId) {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-
-    // Добавляем локальные аудио-дорожки
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    pc.onicecandidate = event => {
-      if (event.candidate) {
-        socket.emit('ice-candidate', { to: peerId, candidate: event.candidate });
-      }
-    };
-
-    pc.ontrack = event => {
-      console.log('Получен удалённый трек:', event.streams[0]);
-      attachRemoteStream(event.streams[0]);
-    };
-
-    return pc;
-  }
-
-  async function getLocalStream() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      return stream;
-    } catch (err) {
-      console.error('Ошибка доступа к микрофону:', err);
-      alert('Пожалуйста, разрешите доступ к микрофону.');
-      throw err;
-    }
-  }
-
-  function attachLocalStream(stream) {
-    let audio = document.getElementById('localAudio');
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.id = 'localAudio';
-      audio.autoplay = true;
-      audio.muted = true; // важно, чтобы не было эха
-      document.body.appendChild(audio);
-    }
-    audio.srcObject = stream;
-  }
-
-  function attachRemoteStream(stream) {
-    let audio = document.getElementById('remoteAudio');
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.id = 'remoteAudio';
-      audio.autoplay = true;
-      document.body.appendChild(audio);
-    }
-    audio.srcObject = stream;
-    // Чтобы гарантировать запуск звука (особенно в Chrome)
-    audio.play().catch(e => console.log('Ошибка воспроизведения звука:', e));
+  function appendMessage(userId, text, isSelf) {
+    const box = document.getElementById('chat-box');
+    const div = document.createElement('div');
+    div.className = 'chat-message' + (isSelf ? ' self' : '');
+    div.innerHTML = `<strong>${isSelf ? 'You' : ''}</strong> ${text}`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
   }
 </script>
 
-
-
-
-<audio id="localAudio" autoplay muted></audio>
-<audio id="remoteAudio" autoplay></audio>
 {% endif %}
 </body>
 </html>
