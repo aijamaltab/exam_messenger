@@ -82,7 +82,7 @@
             console.log("SIP config:", cfg);
             sipConfig = cfg;
         
-            const wsUrl = new URL(cfg.wsServers[0]).origin;  // ✅ исправлено здесь
+            const wsUrl = cfg.wsServers[0];
             console.log("Using WSS URL:", wsUrl);
         
             userAgent = new SIP.UserAgent({
@@ -124,7 +124,9 @@
             alert("Конфигурация SIP не загружена");
             return;
           }
-          const target = SIP.URI.parse(`sip:${phoneNumber}@${sipConfig.domain}`);
+          const target = SIP.UserAgent.makeURI(`sip:${phoneNumber}@${sipConfig.domain}`);
+
+
           if (!target) {
             alert("Неверный формат номера");
             return;
