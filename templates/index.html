@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ismailova Audio Call + Chat</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; background: #f0f0f0; }
+    #chatBox { height: 200px; border: 1px solid #ccc; background: white; overflow-y: auto; padding: 10px; border-radius: 10px; margin-top: 10px; }
+    #chatInput { width: 70%; padding: 10px; border-radius: 10px; border: 1px solid #ccc; }
+    button { padding: 10px 15px; margin-left: 10px; border-radius: 10px; border: none; background: #4CAF50; color: white; cursor: pointer; }
+    button:hover { background: #45a049; }
+    input { padding: 10px; border-radius: 10px; border: 1px solid #ccc; margin-right: 10px; }
+    /* Скрываем видео, т.к. видео не нужно */
+    #localVideo, #remoteVideo { display: none; }
+  </style>
+</head>
+<body>
+  <h2>📞 Ismailova Audio Call + Chat</h2>
+
+  <div>
+    <input id="usernameInput" placeholder="Ваше имя (например, 1002)" />
+    <input id="roomInput" placeholder="Комната (например, 1001)" />
+    <button onclick="joinCall()">🔗 Войти в комнату</button>
+  </div>
+
+  <div style="margin-top: 20px;">
+    <button onclick="startCall()">📞 Позвонить</button>
+  </div>
+
+  <!-- Видео скрыты, но нужны для WebRTC -->
+  <video id="localVideo" autoplay muted playsinline></video>
+  <video id="remoteVideo" autoplay playsinline></video>
+
+  <div>
+    <h3>💬 Чат</h3>
+    <div id="chatBox"></div>
+    <input id="chatInput" type="text" placeholder="Написать сообщение..." />
+    <button onclick="sendMessage()">✉️ Отправить</button>
+  </div>
+
+  <audio id="ringtone" loop>
+    <source src="https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg" type="audio/ogg">
+  </audio>
+
+  <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
+  <script src="/static/client.js"></script>
+</body>
+</html>
