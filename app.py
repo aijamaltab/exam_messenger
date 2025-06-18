@@ -72,19 +72,21 @@ def on_register(data):
 
 @socketio.on('call-user')
 def on_call_user(data):
-    print('→ [server] call-user:', data, '   all users map:', connected_users)
-    target = data.get('to')
+    target = int(data.get('to'))         # ← приводим к int
     offer  = data.get('offer')
-    sid    = connected_users.get(target)
+    print('→ [server] call-user:', data, ' map:', connected_users)
+    sid = connected_users.get(target)
     if sid:
-        print(f'    forwarding call-made to SID={sid}')
-        emit('call-made', {'from': session['user_id'], 'offer': offer}, room=sid)
+        emit('call-made', {
+            'from': session['user_id'],
+            'offer': offer
+        }, room=sid)
     else:
         print(f'    Target {target} not connected!')
 
 @socketio.on('make-answer')
 def on_make_answer(data):
-    target = data.get('to')
+    target = int(data.get('to'))
     answer = data.get('answer')
     sid = connected_users.get(target)
     if sid:
@@ -92,7 +94,7 @@ def on_make_answer(data):
 
 @socketio.on('ice-candidate')
 def on_ice_candidate(data):
-    target = data.get('to')
+    target = int(data.get('to'))
     candidate = data.get('candidate')
     sid = connected_users.get(target)
     if sid:
@@ -195,4 +197,4 @@ def logout():
     return redirect('/login')
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=8080)
+    socketio.run(app, debug=True)
