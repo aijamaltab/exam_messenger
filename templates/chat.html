@@ -53,6 +53,7 @@
   document.addEventListener('DOMContentLoaded', async () => {
     // Получаем локальный микрофон один раз
     localStream = await getLocalStream();
+    attachLocalStream(localStream); // один раз после получения потока
 
     // Назначаем обработчики на кнопки вызова
     document.querySelectorAll('.user-item').forEach(item => {
@@ -129,10 +130,10 @@
     };
 
     pc.ontrack = event => {
+      console.log('Получен удалённый трек:', event.streams[0]);
       attachRemoteStream(event.streams[0]);
     };
 
-    attachLocalStream(localStream);
     return pc;
   }
 
@@ -153,7 +154,7 @@
       audio = document.createElement('audio');
       audio.id = 'localAudio';
       audio.autoplay = true;
-      audio.muted = true; // важно
+      audio.muted = true; // важно, чтобы не было эха
       document.body.appendChild(audio);
     }
     audio.srcObject = stream;
@@ -168,8 +169,11 @@
       document.body.appendChild(audio);
     }
     audio.srcObject = stream;
+    // Чтобы гарантировать запуск звука (особенно в Chrome)
+    audio.play().catch(e => console.log('Ошибка воспроизведения звука:', e));
   }
 </script>
+
 
 
 
