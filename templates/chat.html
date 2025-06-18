@@ -128,7 +128,23 @@
       <source src="https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg" type="audio/ogg">
     </audio>
   </div>
+  <!-- Скрипты -->
   <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
   <script src="/static/client.js"></script>
+  <script>
+    // Останавливаем звонок: закрываем PeerConnection и сбрасываем
+    function stopCall() {
+      if (window.pc) {
+        window.pc.close();
+        window.pc = null;
+      }
+      // Останавливаем рингтон
+      const ringtone = document.getElementById('ringtone');
+      ringtone.pause();
+      ringtone.currentTime = 0;
+      // Уведомляем в чате
+      addChat('Система', 'Звонок остановлен');
+    }
+  </script>
 </body>
 </html>
