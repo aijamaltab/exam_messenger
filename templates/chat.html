@@ -2,258 +2,239 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Messenger Aijamal</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" defer></script>
+  <style>
+    /* Новая цветовая схема */
+    :root {
+      --bg-sidebar: #2f3e46;
+      --bg-main: #cad2c5;
+      --accent: #52796f;
+      --text-light: #ffffff;
+      --text-dark: #1b262c;
+      --btn-primary: #84a98c;
+      --btn-hover: #52796f;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg-main);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .container {
+      display: flex;
+      width: 90vw;
+      max-width: 1200px;
+      height: 80vh;
+      background: var(--bg-main);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+      overflow: hidden;
+    }
+    .sidebar {
+      width: 280px;
+      background: var(--bg-sidebar);
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      color: var(--text-light);
+    }
+    .logout-form { margin-bottom: 20px; }
+    .logout-btn {
+      width: 100%; padding: 10px;
+      background: var(--btn-primary);
+      border: none;
+      border-radius: 8px;
+      color: var(--text-light);
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .logout-btn:hover { background: var(--btn-hover); }
+    .sidebar h2 {
+      font-size: 1.5rem;
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    .user-list {
+      list-style: none;
+      flex-grow: 1;
+      overflow-y: auto;
+    }
+    .user-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .user-item:hover,
+    .user-item.active { background: var(--accent); }
+    .avatar {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid var(--btn-primary);
+    }
+    .user-info strong { color: var(--text-light); }
+    .user-info small { color: #b8c1c3; }
+    .call-user-btn {
+      margin-left: auto;
+      background: var(--btn-primary);
+      border: none;
+      border-radius: 50%;
+      width: 36px; height: 36px;
+      font-size: 1.2rem;
+      color: var(--text-light);
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .call-user-btn:hover { background: var(--btn-hover); }
+
+    .chat {
+      flex-grow: 1;
+      background: var(--text-light);
+      display: flex;
+      flex-direction: column;
+    }
+    .chat-header {
+      padding: 16px 24px;
+      background: var(--btn-primary);
+      color: var(--text-light);
+      font-size: 1.25rem;
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .chat-box {
+      flex-grow: 1;
+      padding: 20px;
+      overflow-y: auto;
+      background: #f0f3f1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .msg {
+      max-width: 65%;
+      padding: 12px 16px;
+      border-radius: 20px;
+      position: relative;
+      word-wrap: break-word;
+      line-height: 1.5;
+      animation: fadeIn 0.3s ease;
+    }
+    .msg-me {
+      background: #d8e2dc;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+      text-align: right;
+    }
+    .msg-other {
+      background: #ffffff;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+      text-align: left;
+    }
+    .timestamp {
+      font-size: 0.75rem;
+      color: #7a7f86;
+      position: absolute;
+      bottom: 6px;
+      right: 10px;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .chat-controls {
+      padding: 12px 20px;
+      display: flex;
+      gap: 10px;
+      background: var(--text-light);
+      border-top: 1px solid #e1e5e2;
+    }
+    .chat-controls input {
+      flex-grow: 1;
+      padding: 12px 16px;
+      border: 1px solid #ccd1ce;
+      border-radius: 24px;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+    .chat-controls input:focus { border-color: var(--btn-primary); }
+    .send-btn {
+      background: var(--btn-primary);
+      border: none;
+      border-radius: 50%;
+      width: 48px; height: 48px;
+      font-size: 1.2rem;
+      color: var(--text-light);
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .send-btn:hover { background: var(--btn-hover); }
+    .end-call-btn {
+      background: #d00000;
+      border: none;
+      border-radius: 50%;
+      width: 48px; height: 48px;
+      font-size: 1.2rem;
+      color: var(--text-light);
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .end-call-btn:hover { background: #9b0000; }
+  </style>
 </head>
 <body>
-{% if session.get('user_id') %}
-<div class="container">
-  <div class="sidebar">
-    <form action="{{ url_for('logout') }}" method="GET">
-      <button type="submit">Logout</button>
-    </form>
-    <h2>Users</h2>
-    <ul id="users" class="user-list">
-      {% for user in users %}
-      <li class="user-item" data-id="{{ user[0] }}">
-        <strong>{{ user[1] }}</strong><br>
-        <small>{{ user[2] }}</small>
-        <button class="call-user-btn">📞</button>
-      </li>
-      {% endfor %}
-    </ul>
+  {% if session.get('user_id') %}
+  <div class="container">
+    <aside class="sidebar">
+      <form action="{{ url_for('logout') }}" method="GET" class="logout-form">
+        <button type="submit" class="logout-btn">Выйти</button>
+      </form>
+      <h2>Пользователи</h2>
+      <ul id="users" class="user-list">
+        {% for user in users %}
+        <li class="user-item" data-id="{{ user[0] }}">
+          <img src="{{ user[3] or url_for('static', filename='default_avatar.png') }}" alt="Аватар {{ user[1] }}" class="avatar">
+          <div class="user-info">
+            <strong>{{ user[1] }}</strong>
+            <small>{{ user[2] }}</small>
+          </div>
+          <button class="call-user-btn">📞</button>
+        </li>
+        {% endfor %}
+      </ul>
+    </aside>
+
+    <section class="chat">
+      <header class="chat-header">
+        <h3 id="chat-with">Выберите пользователя</h3>
+      </header>
+      <div id="chat-box" class="chat-box">
+        <!-- Сообщения будут здесь -->
+      </div>
+      <div class="chat-controls">
+        <input type="text" id="messageInput" placeholder="Напишите сообщение...">
+        <button id="btnSend" class="send-btn">➤</button>
+        <button id="endCallBtn" class="end-call-btn" style="display:none;">❌</button>
+      </div>
+    </section>
   </div>
-  <div class="chat">
-    <div class="chat-header">
-      <h3 id="chat-with">Select a user</h3>
-    </div>
-    <div id="chat-box" class="chat-box"></div>
-    <div class="chat-controls">
-      <input type="text" id="messageInput" placeholder="Enter a message">
-      <button onclick="sendMessage()">➤</button>
-      <button id="endCallBtn" onclick="endCall()" style="display:none;">❌ End Call</button>
-    </div>
-  </div>
-</div>
 
-<script>
-  const socket = io();
-  const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
-  const localUserId = "{{ session['user_id'] }}";
-  const peerConnections = new Map();
-  const pendingCandidates = {};
-  let localStream = null;
-  let selectedUserId = null;
-
-  socket.on('connect', () => {
-    console.log('✔ Socket connected:', socket.id);
-    socket.emit('register', { user_id: localUserId });
-  });
-
-  document.addEventListener('DOMContentLoaded', async () => {
-    localStream = await getLocalStream();
-    attachLocalStream(localStream);
-
-    document.querySelectorAll('.user-item').forEach(item => {
-      const targetId = item.dataset.id;
-      const btn = item.querySelector('.call-user-btn');
-      if (targetId === localUserId) btn.disabled = true;
-
-      // 👉 Выбор пользователя
-      item.addEventListener('click', () => {
-        selectedUserId = targetId;
-        document.getElementById('chat-with').textContent = 'Chat with ' + item.querySelector('strong').textContent;
-        loadMessages(selectedUserId);
-      });
-
-      btn.addEventListener('click', () => startCall(targetId));
-    });
-
-    // ========== Видеозвонки ==========
-    socket.on('call-made', async ({ from, offer }) => {
-      const pc = createPeerConnection(from);
-      peerConnections.set(from, pc);
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('make-answer', { to: from, answer });
-      if (pendingCandidates[from]) {
-        for (const candidate of pendingCandidates[from]) {
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        }
-        delete pendingCandidates[from];
-      }
-    });
-
-    socket.on('answer-made', async ({ from, answer }) => {
-      const pc = peerConnections.get(from);
-      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    });
-
-    socket.on('ice-candidate', async ({ from, candidate }) => {
-      const pc = peerConnections.get(from);
-      if (pc) {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      } else {
-        pendingCandidates[from] = pendingCandidates[from] || [];
-        pendingCandidates[from].push(candidate);
-      }
-    });
-
-    // ========== Сообщения ==========
-    socket.on('new_message', data => {
-      const { from_user_id, to_user_id } = data;
-      if ((from_user_id == selectedUserId && to_user_id == localUserId) ||
-          (from_user_id == localUserId && to_user_id == selectedUserId)) {
-        loadMessages(selectedUserId);
-      }
-    });
-  });
-
-  async function startCall(to) {
-    if (!localStream) {
-      localStream = await getLocalStream();
-      attachLocalStream(localStream);
-    }
-    
-    const pc = createPeerConnection(to);
-    peerConnections.set(to, pc);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit('call-user', { to, offer });
-  
-    document.getElementById('endCallBtn').style.display = 'inline-block'; // показать кнопку завершения
-  }
-
-
-
-  function createPeerConnection(peerId) {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-    pc.onicecandidate = event => {
-      if (event.candidate) {
-        socket.emit('ice-candidate', { to: peerId, candidate: event.candidate });
-      }
-    };
-    pc.ontrack = event => attachRemoteStream(event.streams[0]);
-    return pc;
-  }
-
-  async function getLocalStream() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      return stream;
-    } catch (err) {
-      alert('Разрешите доступ к микрофону');
-      throw err;
-    }
-  }
-
-  function attachLocalStream(stream) {
-    let audio = document.getElementById('localAudio');
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.id = 'localAudio';
-      audio.autoplay = true;
-      audio.muted = true;
-      document.body.appendChild(audio);
-    }
-    audio.srcObject = stream;
-  }
-
-  function attachRemoteStream(stream) {
-    let audio = document.getElementById('remoteAudio');
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.id = 'remoteAudio';
-      audio.autoplay = true;
-      document.body.appendChild(audio);
-    }
-    audio.srcObject = stream;
-    audio.play().catch(e => console.log('Ошибка воспроизведения:', e));
-  }
-
-  // ========== ЧАТ ==========
-
-  function loadMessages(userId) {
-    fetch(`/messages/${userId}`)
-      .then(res => res.json())
-      .then(data => {
-        const box = document.getElementById('chat-box');
-        box.innerHTML = '';
-        data.forEach(msg => {
-          const div = document.createElement('div');
-          div.className = msg.from_me ? 'msg msg-me' : 'msg msg-other';
-          div.innerHTML = `<span>${msg.message}</span><small>${msg.timestamp}</small>`;
-          box.appendChild(div);
-        });
-        box.scrollTop = box.scrollHeight;
-      });
-  }
-
-  function sendMessage() {
-    const input = document.getElementById('messageInput');
-    const message = input.value.trim();
-    if (!message || !selectedUserId) return;
-
-    fetch('/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to_user_id: selectedUserId, message })
-    })
-    .then(res => res.json())
-    .then(() => {
-      input.value = '';
-    });
-  }
-  function endCall() {
-  // Отключаем все peerConnections
-  peerConnections.forEach((pc, peerId) => {
-    pc.getSenders().forEach(sender => {
-      try {
-        pc.removeTrack(sender);
-      } catch (e) {
-        console.warn('Ошибка removeTrack:', e);
-      }
-    });
-    pc.close();
-    peerConnections.delete(peerId);
-  });
-
-  // Останавливаем локальный поток
-  if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
-    localStream = null;
-  }
-
-  // Очищаем аудио-элементы
-  const remoteAudio = document.getElementById('remoteAudio');
-  if (remoteAudio) {
-    remoteAudio.pause();
-    remoteAudio.srcObject = null;
-  }
-
-  const localAudio = document.getElementById('localAudio');
-  if (localAudio) {
-    localAudio.pause();
-    localAudio.srcObject = null;
-  }
-
-  // Скрываем кнопку завершения звонка
-  document.getElementById('endCallBtn').style.display = 'none';
-
-  console.log('Звонок завершён');
-}
-
-</script>
-
-
-
-
-
-<audio id="localAudio" autoplay muted></audio>
-<audio id="remoteAudio" autoplay></audio>
-{% endif %}
+  <audio id="localAudio" autoplay muted style="display:none;"></audio>
+  <audio id="remoteAudio" autoplay style="display:none;"></audio>
+  <script src="/static/client.js" defer></script>
+  {% endif %}
 </body>
 </html>
