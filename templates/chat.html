@@ -9,13 +9,13 @@
   <style>
     /* Новая цветовая схема */
     :root {
-      --bg-sidebar: #2f3e46;
-      --bg-main: #cad2c5;
-      --accent: #52796f;
+      --bg-sidebar: #3e1f47;
+      --bg-main: #f1e3f3;
+      --accent: #a349a4;
       --text-light: #ffffff;
-      --text-dark: #1b262c;
-      --btn-primary: #84a98c;
-      --btn-hover: #52796f;
+      --text-dark: #2e1a2b;
+      --btn-primary: #c084fc;
+      --btn-hover: #a855f7;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -76,17 +76,12 @@
       margin-bottom: 8px;
       cursor: pointer;
       transition: background 0.2s;
+      color: var(--text-light);
+      font-weight: 500;
     }
     .user-item:hover,
     .user-item.active { background: var(--accent); }
-    .avatar {
-      width: 48px; height: 48px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 2px solid var(--btn-primary);
-    }
-    .user-info strong { color: var(--text-light); }
-    .user-info small { color: #b8c1c3; }
+
     .call-user-btn {
       margin-left: auto;
       background: var(--btn-primary);
@@ -118,7 +113,7 @@
       flex-grow: 1;
       padding: 20px;
       overflow-y: auto;
-      background: #f0f3f1;
+      background: #f7f2f7;
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -131,9 +126,10 @@
       word-wrap: break-word;
       line-height: 1.5;
       animation: fadeIn 0.3s ease;
+      color: var(--text-dark);
     }
     .msg-me {
-      background: #d8e2dc;
+      background: #e9d7f7;
       align-self: flex-end;
       border-bottom-right-radius: 4px;
       text-align: right;
@@ -165,7 +161,7 @@
     .chat-controls input {
       flex-grow: 1;
       padding: 12px 16px;
-      border: 1px solid #ccd1ce;
+      border: 1px solid #d1c4e9;
       border-radius: 24px;
       outline: none;
       transition: border-color 0.3s;
@@ -205,8 +201,7 @@
       <h2>Пользователи</h2>
       <ul id="users" class="user-list">
         {% for user in users %}
-        <li class="user-item" data-id="{{ user[0] }}">
-          <img src="{{ user[3] or url_for('static', filename='default_avatar.png') }}" alt="Аватар {{ user[1] }}" class="avatar">
+        <li class="user-item" data-id="{{ user[0] }}">        
           <div class="user-info">
             <strong>{{ user[1] }}</strong>
             <small>{{ user[2] }}</small>
